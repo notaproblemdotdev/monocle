@@ -60,6 +60,10 @@ One dashboard showing all assigned work items and pending PRs/MRs without switch
 
 - **Tech stack:** Python with Textual framework for TUI
 - **Dependencies:** Requires `gh`, `glab`, and/or `acli` CLIs to be installed and authenticated
+- **Package management:** UV (from Astral) for dependency management
+- **Code quality:** Ruff (from Astral) for linting and formatting
+- **Type checking:** MyPy for static type analysis
+- **Testing:** pytest for unit and integration tests
 - **Async requirement:** Must load data asynchronously without blocking UI
 - **UI responsiveness:** Background reloads must not freeze or interrupt user interaction
 - **Layout:** Two main sections — PRs/MRs and Work Items
@@ -74,6 +78,10 @@ One dashboard showing all assigned work items and pending PRs/MRs without switch
 | 'o' key for opening browser | Vim-style convention familiar to CLI users | — Pending |
 | Two-section layout (PRs + Work Items) | Logical grouping by task type vs source | — Pending |
 | Auto-detect CLIs vs explicit config | Better UX — only show relevant sections, no config needed | — Pending |
+| UV for dependency management | Fast, modern Python package manager from Astral | — Pending |
+| Ruff for linting/formatting | Fast, unified Python linter from Astral | — Pending |
+| MyPy for type checking | Industry standard for Python static analysis | — Pending |
+| pytest for testing | Modern, flexible Python testing framework | — Pending |
 
 ---
 *Last updated: 2025-02-07 after initialization*
