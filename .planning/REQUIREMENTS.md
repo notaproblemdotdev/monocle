@@ -17,17 +17,17 @@
 
 - [ ] **DATA-01**: GitLab MRs fetched via glab CLI using --json flag
 - [ ] **DATA-02**: Jira work items fetched via acli CLI using --json flag
-- [ ] **DATA-03**: All CLI responses parsed and validated with Pydantic models
+- [x] **DATA-03**: All CLI responses parsed and validated with Pydantic models
 - [ ] **DATA-04**: GitLab MRs include: MR number, title, status, author, URL
 - [ ] **DATA-05**: Jira work items include: issue key, title, status, priority, URL
 - [ ] **DATA-06**: Display format for each item shows: Key + Title + Status + Priority
 
 ### Async & Performance
 
-- [ ] **ASYNC-01**: Data fetching uses Textual Workers API with @work decorator
-- [ ] **ASYNC-02**: Workers use exclusive=True to prevent race conditions
-- [ ] **ASYNC-03**: UI remains responsive during data fetching (non-blocking)
-- [ ] **ASYNC-04**: Failed CLI calls handled gracefully with error messages
+- [x] **ASYNC-01**: Data fetching uses Textual Workers API with @work decorator
+- [x] **ASYNC-02**: Workers use exclusive=True to prevent race conditions
+- [x] **ASYNC-03**: UI remains responsive during data fetching (non-blocking)
+- [x] **ASYNC-04**: Failed CLI calls handled gracefully with error messages
 
 ### Configuration
 
@@ -36,7 +36,7 @@
 
 ### Testing
 
-- [ ] **TEST-01**: Unit tests for Pydantic models using pytest
+- [x] **TEST-01**: Unit tests for Pydantic models using pytest
 - [ ] **TEST-02**: Async tests for CLI adapters using pytest-asyncio
 - [ ] **TEST-03**: Integration tests for Textual widgets
 
@@ -83,17 +83,17 @@
 | DASH-05 | Phase 3 | Pending |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
-| DATA-03 | Phase 1 | Pending |
+| DATA-03 | Phase 1 | Complete |
 | DATA-04 | Phase 2 | Pending |
 | DATA-05 | Phase 2 | Pending |
 | DATA-06 | Phase 3 | Pending |
-| ASYNC-01 | Phase 1 | Pending |
-| ASYNC-02 | Phase 1 | Pending |
-| ASYNC-03 | Phase 1 | Pending |
-| ASYNC-04 | Phase 1 | Pending |
+| ASYNC-01 | Phase 1 | Complete |
+| ASYNC-02 | Phase 1 | Complete |
+| ASYNC-03 | Phase 1 | Complete |
+| ASYNC-04 | Phase 1 | Complete |
 | CONFIG-01 | Phase 2 | Pending |
 | CONFIG-02 | Phase 2 | Pending |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 2 | Pending |
 | TEST-03 | Phase 3 | Pending |
 
@@ -109,4 +109,4 @@
 
 ---
 *Requirements defined: 2025-02-07*
-*Last updated: 2025-02-07 after initial definition*
+*Last updated: 2025-02-07 after Phase 1 completion*

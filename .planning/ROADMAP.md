@@ -6,7 +6,7 @@ This roadmap delivers a unified terminal dashboard that aggregates work items an
 
 ## Phases
 
-- [ ] **Phase 1: Foundation** - Async infrastructure and data models
+- [x] **Phase 1: Foundation** - Async infrastructure and data models ✓
 - [ ] **Phase 2: CLI Adapters** - Auto-detection and data fetching from platform CLIs
 - [ ] **Phase 3: Dashboard UI** - Textual widgets, navigation, and browser integration
 
@@ -31,8 +31,8 @@ This roadmap delivers a unified terminal dashboard that aggregates work items an
 
 Plans:
 - [x] 01-01-PLAN.md — UV project init, Ruff/MyPy/pytest setup, directory structure
-- [ ] 01-02-PLAN.md — Pydantic models for MR/PR and Issue data structures
-- [ ] 01-03-PLAN.md — Async subprocess utilities with Textual Workers API, error handling
+- [x] 01-02-PLAN.md — Pydantic models for MR/PR and Issue data structures
+- [x] 01-03-PLAN.md — Async subprocess utilities with Textual Workers API, error handling
 
 ### Phase 2: CLI Adapters
 
@@ -88,9 +88,9 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/3 | In progress | 2026-02-07 |
+| 1. Foundation | 3/3 | ✓ Complete | 2025-02-07 |
 | 2. CLI Adapters | 0/3 | Not started | - |
 | 3. Dashboard UI | 0/3 | Not started | - |
 
 ---
-*Last updated: 2025-02-07 after roadmap creation*
+*Last updated: 2025-02-07 after Phase 1 completion*
