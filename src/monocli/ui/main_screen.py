@@ -120,7 +120,7 @@ class MainScreen(Screen):
 
         registry = DetectionRegistry()
         registry.register(CLIDetector("glab", ["auth", "status"]))
-        registry.register(CLIDetector("acli", ["whoami"]))
+        registry.register(CLIDetector("acli", ["jira", "auth", "status"]))
 
         # Start detection and fetching using run_worker API
         self.run_worker(self.fetch_merge_requests(), exclusive=True)
