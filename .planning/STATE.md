@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2025-02-07)
 ## Current Position
 
 Phase: 4 of 4 (Add Logging)
-Plan: 1 of 1 in current phase (Structlog Integration)
+Plan: 2 of 2 in current phase (Fix asyncio subprocess race condition)
 Status: Phase complete
-Last activity: 2026-02-08 — Completed 04-01-PLAN.md (Add Logging with Structlog)
+Last activity: 2026-02-08 — Completed 04-02-PLAN.md (Fix asyncio subprocess race condition)
 
-Progress: [██████████] 100% (11 of 11 total plans)
+Progress: [██████████] 100% (12 of 12 total plans)
 
 ## Performance Metrics
 
@@ -136,6 +136,12 @@ Recent decisions affecting current work:
 - Add --debug CLI flag for verbose logging
 - Implement sensitive data filtering processor for security
 
+**New from 04-02 (Fix asyncio subprocess race condition):**
+- Use asyncio.Semaphore(3) to limit concurrent subprocess execution
+- Keep semaphore locked for entire subprocess lifecycle (creation → communication → cleanup)
+- Add await proc.wait() in finally block to ensure proper process cleanup
+- Prevents asyncio.exceptions.InvalidStateError from transport cleanup race conditions
+
 ### Roadmap Evolution
 
 - Phase 4 added: Add proper logging with structlog
@@ -150,9 +156,17 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T18:51:27Z
-Stopped at: Completed 04-01-PLAN.md (Add Logging with Structlog)
+Last session: 2026-02-08T20:08:00Z
+Stopped at: Completed 04-02-PLAN.md (Fix asyncio subprocess race condition)
 Resume file: None
+
+## Operational Notes
+
+**Log Location:** Application logs are stored at `~/.local/share/monocli/logs/`
+- Log files: `monocli_YYYY-MM-DD.log` (JSON format)
+- Console output: Human-readable with colors (real-time)
+- Debug mode: `uv run monocli --debug` (verbose logging)
+- Log levels: Controlled via `LOG_LEVEL` environment variable
 
 ## Next Phase
 
