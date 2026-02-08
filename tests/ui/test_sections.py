@@ -95,7 +95,7 @@ class TestMergeRequestSection:
 
         async with app.run_test() as pilot:
             await pilot.pause()
-            section.set_loading()
+            section.show_loading()
             await pilot.pause()
 
             assert section.state == SectionState.LOADING
@@ -270,7 +270,7 @@ class TestWorkItemSection:
 
         async with app.run_test() as pilot:
             await pilot.pause()
-            section.set_loading()
+            section.show_loading()
             await pilot.pause()
 
             assert section.state == SectionState.LOADING
@@ -369,7 +369,7 @@ class TestSectionBaseFunctionality:
             await pilot.pause()
 
             # Start in loading
-            section.set_loading()
+            section.show_loading()
             await pilot.pause()
             assert section.state == SectionState.LOADING
 

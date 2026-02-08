@@ -109,7 +109,7 @@ class BaseSection(Static):
         """Get the empty state message. Override in subclasses."""
         return "No items found"
 
-    def set_loading(self) -> None:
+    def show_loading(self) -> None:
         """Set section to loading state."""
         self.state = SectionState.LOADING
 
