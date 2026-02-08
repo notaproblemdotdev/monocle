@@ -271,20 +271,31 @@ class MergeRequestSection(BaseSection):
         if self._data_table is None:
             return None
 
-        row_key = self._data_table.cursor_row
-        if row_key is None:
+        # cursor_row is the index (0, 1, 2, ...)
+        row_index = self._data_table.cursor_row
+        if row_index is None:
             return None
 
-        # Get the row data by key
+        # Get the row key at the cursor index
         try:
-            row = self._data_table.get_row(row_key)
+            # Get the row coordinate and extract the key
+            row_keys = list(self._data_table.rows.keys())
+            if row_index < 0 or row_index >= len(row_keys):
+                return None
+
+            # The row key is the URL we stored when adding the row
+            row_key = row_keys[row_index]
+            if isinstance(row_key, str):
+                return row_key
+
+            # Fallback: try to get row data and find MR
+            row = self._data_table.get_row_at(row_index)
             if row:
-                # Find the original MR to get the URL
                 key = row[0]  # Key column
                 for mr in self.merge_requests:
                     if mr.display_key() == key:
                         return str(mr.web_url)
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, AttributeError):
             pass
 
         return None
@@ -387,20 +398,31 @@ class WorkItemSection(BaseSection):
         if self._data_table is None:
             return None
 
-        row_key = self._data_table.cursor_row
-        if row_key is None:
+        # cursor_row is the index (0, 1, 2, ...)
+        row_index = self._data_table.cursor_row
+        if row_index is None:
             return None
 
-        # Get the row data by key
+        # Get the row key at the cursor index
         try:
-            row = self._data_table.get_row(row_key)
+            # Get the row coordinate and extract the key
+            row_keys = list(self._data_table.rows.keys())
+            if row_index < 0 or row_index >= len(row_keys):
+                return None
+
+            # The row key is the URL we stored when adding the row
+            row_key = row_keys[row_index]
+            if isinstance(row_key, str):
+                return row_key
+
+            # Fallback: try to get row data and find work item
+            row = self._data_table.get_row_at(row_index)
             if row:
-                # Find the original item to get the URL
                 key = row[0]  # Key column
                 for item in self.work_items:
                     if item.display_key() == key:
                         return item.url
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, AttributeError):
             pass
 
         return None
