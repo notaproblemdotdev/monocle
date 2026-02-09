@@ -53,13 +53,14 @@ class BaseSection(Static):
     def compose(self) -> ComposeResult:
         """Compose the section layout."""
         with Vertical():
-            # Header with title and loading indicator
+            # Header with title
             with Horizontal(id="header"):
                 yield Label(self.section_title, id="title")
-                yield LoadingIndicator(id="spinner")
 
-            # Content area for data table or messages
+            # Content area for data table, loading indicator, or messages
             with Vertical(id="content"):
+                with Vertical(id="spinner-container"):
+                    yield LoadingIndicator(id="spinner")
                 yield DataTable[str](id="data-table")
                 yield Label("", id="message")
 
@@ -75,26 +76,31 @@ class BaseSection(Static):
     def _update_visibility(self) -> None:
         """Update widget visibility based on current state."""
         spinner = self.query_one("#spinner", LoadingIndicator)
+        spinner_container = self.query_one("#spinner-container", Vertical)
         table = self.query_one("#data-table", DataTable)
         message = self.query_one("#message", Label)
 
         if self.state == SectionState.LOADING:
             spinner.styles.display = "block"
+            spinner_container.styles.display = "block"
             table.styles.display = "none"
             message.styles.display = "none"
         elif self.state == SectionState.EMPTY:
             spinner.styles.display = "none"
+            spinner_container.styles.display = "none"
             table.styles.display = "none"
             message.styles.display = "block"
             message.update(self._get_empty_message())
         elif self.state == SectionState.ERROR:
             spinner.styles.display = "none"
+            spinner_container.styles.display = "none"
             table.styles.display = "none"
             message.styles.display = "block"
             message.update(f"Error: {self.error_message}")
             message.add_class("error")
         else:  # DATA state
             spinner.styles.display = "none"
+            spinner_container.styles.display = "none"
             table.styles.display = "block"
             message.styles.display = "none"
 
