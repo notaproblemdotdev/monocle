@@ -23,7 +23,7 @@ This roadmap extends Mono CLI v2.0 with GitHub and Todoist integrations, creatin
 
 ### 🚧 v2.0 Extended Platform Support (In Progress)
 
-- [ ] Phase 5: GitHub Integration (4 plans estimated)
+- [ ] Phase 5: GitHub Integration (2 plans)
 - [ ] Phase 6: Todoist Integration (3 plans estimated)
 - [ ] Phase 7: Dashboard Enhancements (4 plans estimated)
 
@@ -46,13 +46,11 @@ This roadmap extends Mono CLI v2.0 with GitHub and Todoist integrations, creatin
 6. GitHubAdapter follows CLIAdapter pattern with proper error handling
 7. All GitHub adapter functionality is tested
 
-**Plans:** 4 plans in 2 waves
+**Plans:** 2 plans in 2 waves
 
 Plans:
-- [ ] 05-01-PLAN.md — Create GitHub CLI detection and auth checking
-- [ ] 05-02-PLAN.md — Implement GitHubAdapter for PR fetching
-- [ ] 05-03-PLAN.md — Implement GitHub Issues fetching
-- [ ] 05-04-PLAN.md — Update dashboard to combine GitHub and GitLab PRs
+- [ ] 05-01-PLAN.md — Create GitHubAdapter (PR + Issue fetching) with tests
+- [ ] 05-02-PLAN.md — Integrate GitHub into dashboard (detection, fetching, display)
 
 **Details:**
 GitHub integration mirrors the GitLab adapter pattern. The `gh` CLI is detected, auth is verified via `gh auth status`, and PRs/Issues are fetched using `--json` output. Pydantic models (GitHubPullRequest, GitHubIssue) validate responses. The PRs section is updated to aggregate from both GitHub and GitLab when both CLIs are available.
@@ -131,7 +129,7 @@ Phases execute in numeric order: 5 → 6 → 7
 | 2. CLI Adapters | v1.0 | 3/3 | ✓ Complete | 2026-02-07 |
 | 3. Dashboard UI | v1.0 | 7/7 | ✓ Complete | 2026-02-09 |
 | 4. Add Logging | v1.0 | 2/2 | ✓ Complete | 2026-02-09 |
-| 5. GitHub Integration | v2.0 | 0/4 | Planned | - |
+| 5. GitHub Integration | v2.0 | 0/2 | Planned | - |
 | 6. Todoist Integration | v2.0 | 0/3 | Planned | - |
 | 7. Dashboard Enhancements | v2.0 | 0/4 | Planned | - |
 
