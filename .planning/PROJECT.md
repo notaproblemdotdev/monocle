@@ -10,26 +10,32 @@ One dashboard showing all assigned work items and pending PRs/MRs without switch
 
 ## Requirements
 
-### Validated
+### Validated (v1.0)
 
-(None yet — ship to validate)
+- ✓ TUI framework using Textual renders two-section dashboard — v1.0
+- ✓ Auto-detect which CLIs are installed (gh, glab, acli) and show only corresponding sections — v1.0
+- ✓ Dashboard displays all sections from start with per-section loading spinners — v1.0
+- ✓ Async data fetching without blocking UI — v1.0
+- ✓ PRs/MRs section: merge/pull requests assigned to user OR created by user — v1.0
+- ✓ Work Items section: issues assigned to user that are not closed — v1.0
+- ✓ Display format for each item: Key + Title + Status + Priority — v1.0
+- ✓ Press 'o' key to open selected item in default browser — v1.0
+- ✓ Structured logging with structlog — v1.0
+- ✓ Configurable log levels via LOG_LEVEL env var — v1.0
 
-### Active
+### Active (v2.0)
 
-- [ ] TUI framework using Textual renders two-section dashboard
-- [ ] Auto-detect which CLIs are installed (gh, glab, acli) and show only corresponding sections
-- [ ] Dashboard displays all sections from start with per-section loading spinners
-- [ ] Async data fetching without blocking UI
-- [ ] PRs/MRs section: merge/pull requests assigned to user OR created by user
-- [ ] Work Items section: issues assigned to user that are not closed (GitHub issues + Jira work items)
-- [ ] Display format for each item: Key + Title + Status + Priority
-- [ ] Press 'o' key to open selected item in default browser
+- [ ] **GitHub Support** — Add GitHub CLI adapter for PRs and Issues
 - [ ] Auto-refresh capability for keeping data current
 - [ ] Manual refresh capability (r/F5) for forcing updates
 - [ ] Background reload without blocking UI interactions
+- [ ] Search/filter functionality (press '/' to filter)
+- [ ] Help screen (? key) for keyboard shortcuts
+- [ ] Configuration file support (~/.config/monocli/config.yaml)
 
 ### Out of Scope
 
+- **In-TUI code review/editing** — Terminal is poor for these tasks; redirect to browser
 - **Real-time notifications** — Out of v1 scope; focus on on-demand dashboard view
 - **Modifying items from CLI** — View-only in v1, editing via web interface
 - **Custom theming** — Standard Textual themes sufficient for MVP
@@ -39,27 +45,39 @@ One dashboard showing all assigned work items and pending PRs/MRs without switch
 
 ## Context
 
+**Current State:** v1.0 shipped — 4 phases, 15 plans, 6,593 LOC Python
+
+**Tech Stack:**
+- Python 3.13+ with Textual 7.x framework
+- Pydantic for data validation
+- structlog for structured logging
+- UV for dependency management
+- Ruff for linting/formatting
+- MyPy for type checking
+- pytest for testing
+
 **Target Users:** Developers working with Jira, GitHub, and/or GitLab who prefer terminal interfaces over browser-based UIs and want a unified view of their work.
 
 **Problem Being Solved:** Context switching between multiple browser tabs (Jira for issues, GitHub/GitLab for PRs) to see what's on the user's plate. This tool provides a single command (`monocli`) that aggregates everything in one view.
 
 **Data Sources:**
-- **GitHub:** `gh` CLI for pull requests
-- **GitLab:** `glab` CLI for merge requests  
-- **Jira:** `acli` CLI for work items
+- **GitLab:** `glab` CLI for merge requests (✓ implemented)
+- **Jira:** `acli` CLI for work items (✓ implemented)
+- **GitHub:** `gh` CLI for pull requests (planned for v2.0)
 
 **Authentication:** Relies on existing CLI authentication; no separate auth mechanism needed.
 
 **Architecture Approach:**
 - Plugin-style architecture for different data sources (CLI adapters)
-- Each source has its own async loader
+- Each source has its own async loader using Textual Workers API
 - Loading states per section with spinners
 - Non-blocking UI throughout
+- asyncio.Semaphore(3) for subprocess concurrency control
 
 ## Constraints
 
 - **Tech stack:** Python with Textual framework for TUI
-- **Dependencies:** Requires `gh`, `glab`, and/or `acli` CLIs to be installed and authenticated
+- **Dependencies:** Requires `glab` and/or `acli` CLIs to be installed and authenticated (GitHub support planned)
 - **Package management:** UV (from Astral) for dependency management
 - **Code quality:** Ruff (from Astral) for linting and formatting
 - **Type checking:** MyPy for static type analysis
@@ -72,16 +90,18 @@ One dashboard showing all assigned work items and pending PRs/MRs without switch
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use Textual framework | Modern Python TUI library with async support | — Pending |
-| Shell out to existing CLIs vs APIs | Reuse existing auth, simpler implementation, no credential management | — Pending |
-| Per-section loading spinners | Users see dashboard immediately, async feedback per data source | — Pending |
-| 'o' key for opening browser | Vim-style convention familiar to CLI users | — Pending |
-| Two-section layout (PRs + Work Items) | Logical grouping by task type vs source | — Pending |
-| Auto-detect CLIs vs explicit config | Better UX — only show relevant sections, no config needed | — Pending |
-| UV for dependency management | Fast, modern Python package manager from Astral | — Pending |
-| Ruff for linting/formatting | Fast, unified Python linter from Astral | — Pending |
-| MyPy for type checking | Industry standard for Python static analysis | — Pending |
-| pytest for testing | Modern, flexible Python testing framework | — Pending |
+| Use Textual framework | Modern Python TUI library with async support | ✓ Good — excellent async support, reactive properties |
+| Shell out to existing CLIs vs APIs | Reuse existing auth, simpler implementation | ✓ Good — zero auth complexity, uses existing tools |
+| Per-section loading spinners | Users see dashboard immediately, async feedback | ✓ Good — clear UX pattern, immediate feedback |
+| 'o' key for opening browser | Vim-style convention familiar to CLI users | ✓ Good — intuitive for target audience |
+| Two-section layout | Logical grouping by task type vs source | ✓ Good — mental model matches user workflow |
+| Auto-detect CLIs vs explicit config | Better UX — zero-config experience | ✓ Good — works out of box if CLIs installed |
+| UV for dependency management | Fast, modern Python package manager | ✓ Good — fast installs, good lock file |
+| Ruff for linting/formatting | Fast, unified Python linter | ✓ Good — single tool covers everything |
+| MyPy for type checking | Industry standard for Python | ✓ Good — strict mode catches bugs early |
+| pytest for testing | Modern, flexible Python testing | ✓ Good — pytest-asyncio handles async tests well |
+| structlog for logging | Structured JSON logging for production | ✓ Good — both human and machine readable |
+| asyncio.Semaphore(3) | Limit concurrent subprocess execution | ✓ Good — prevents race conditions |
 
 ---
-*Last updated: 2025-02-07 after initialization*
+*Last updated: 2026-02-09 after v1.0 milestone completion*
