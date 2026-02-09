@@ -4,7 +4,7 @@
   <img src=".assets/logo.png" alt="Monocli Logo" width="200">
 </p>
 
-A unified terminal dashboard for managing pull/merge requests from GitLab and work items from Jira.
+A unified terminal dashboard for managing pull/merge requests from GitLab and work items from Jira. Built with an extensible architecture to support additional platforms.
 
 ## Features
 
@@ -43,6 +43,8 @@ Or with uvx:
 
 ```bash
 uvx monocli
+# or
+uvx https://github.com/notaproblemdotdev/monocli
 ```
 
 ## Configuration
@@ -77,6 +79,15 @@ uv run ruff check .
 # Run type checking
 uv run ty src/
 ```
+
+## Future Plans
+
+Support for additional platforms is being considered:
+
+- **GitHub** - Pull Requests and Issues
+- **Bitbucket** - Pull Requests
+- **Trello** - Cards and Boards
+- **Todoist** - Tasks and Projects
 
 ## License
 
