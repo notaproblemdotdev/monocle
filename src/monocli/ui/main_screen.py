@@ -6,6 +6,7 @@ into a 50/50 vertical layout with async data fetching from GitLab and Jira.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
@@ -79,6 +80,32 @@ class MainScreen(Screen):
     #sections-container {
         height: 100%;
     }
+
+    #content {
+        height: 1fr;
+    }
+
+    #spinner-container {
+        display: none;
+        height: 100%;
+        width: 100%;
+        content-align: center middle;
+    }
+
+    #spinner-container LoadingIndicator {
+        width: auto;
+        height: auto;
+    }
+
+    #message {
+        height: 100%;
+        width: 100%;
+        content-align: center middle;
+    }
+
+    #data-table {
+        height: 100%;
+    }
     """
 
     def compose(self) -> ComposeResult:
@@ -123,8 +150,22 @@ class MainScreen(Screen):
         registry.register(CLIDetector("acli", ["jira", "auth", "status"]))
 
         # Start detection and fetching using run_worker API
-        self.run_worker(self.fetch_merge_requests(), exclusive=True)
-        self.run_worker(self.fetch_work_items(), exclusive=True)
+        # Run both fetches concurrently - asyncio.Semaphore in async_utils protects
+        # against subprocess race conditions
+        self.run_worker(self._fetch_all_data(), exclusive=True)
+
+    async def _fetch_all_data(self) -> None:
+        """Fetch all data concurrently with semaphore protection.
+
+        Uses asyncio.gather() to run GitLab and Jira fetches in parallel,
+        reducing total load time. The subprocess semaphore in async_utils
+        prevents race conditions in asyncio's subprocess transport cleanup.
+        """
+        await asyncio.gather(
+            self.fetch_merge_requests(),
+            self.fetch_work_items(),
+            return_exceptions=True,
+        )
 
     async def fetch_merge_requests(self) -> None:
         """Fetch merge requests from GitLab.
@@ -133,6 +174,7 @@ class MainScreen(Screen):
         Updates the MR section with data when complete.
         """
         from monocli.adapters.gitlab import GitLabAdapter
+        from monocli.config import ConfigError, get_config
 
         self.mr_section.show_loading()
         self.mr_loading = True
@@ -150,8 +192,30 @@ class MainScreen(Screen):
                 self.mr_loading = False
                 return
 
-            mrs = await adapter.fetch_assigned_mrs()
-            self.mr_section.update_data(mrs)
+            # Get group from config
+            config = get_config()
+            try:
+                group = config.require_gitlab_group()
+            except ConfigError as e:
+                self.mr_section.set_error(str(e))
+                self.mr_loading = False
+                return
+
+            # Fetch MRs assigned to me
+            assigned_mrs = await adapter.fetch_assigned_mrs(group=group, assignee="@me")
+
+            # Fetch MRs authored by me (pass None for assignee to avoid glab conflict)
+            authored_mrs = await adapter.fetch_assigned_mrs(group=group, assignee="", author="@me")
+
+            # Combine and deduplicate by IID
+            seen_iids = set()
+            all_mrs = []
+            for mr in assigned_mrs + authored_mrs:
+                if mr.iid not in seen_iids:
+                    seen_iids.add(mr.iid)
+                    all_mrs.append(mr)
+
+            self.mr_section.update_data(all_mrs)
         except Exception as e:
             self.mr_section.set_error(str(e))
         finally:
