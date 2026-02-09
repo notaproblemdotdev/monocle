@@ -62,8 +62,9 @@ class BaseSection(Static):
 
     BaseSection #spinner-container {
         display: none;
-        height: auto;
+        height: 100%;
         width: 100%;
+        content-align: center middle;
     }
 
     BaseSection #data-table {
