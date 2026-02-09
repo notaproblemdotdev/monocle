@@ -114,6 +114,7 @@ class MainScreen(Screen):
         with Vertical(id="sections-container"):
             # Top section: Merge Requests (with two subsections)
             with Vertical(id="mr-container"):
+                yield Label("Merge Requests", classes="section-label")
                 self.mr_container = MergeRequestContainer()
                 yield self.mr_container
 
@@ -261,7 +262,7 @@ class MainScreen(Screen):
                 self.mr_container.focus_section("opened")
             else:
                 self.active_section = "work"
-                self.work_section.focus()
+                self.work_section.focus_table()
         else:
             # From Work section, go back to MR "Assigned to me"
             self.active_section = "mr"
