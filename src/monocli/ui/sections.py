@@ -15,7 +15,7 @@ from textual.reactive import reactive
 from textual.widgets import DataTable, Label, LoadingIndicator, Static
 
 if TYPE_CHECKING:
-    from monocli.models import JiraWorkItem, MergeRequest
+    from monocli.models import MergeRequest, TodoistTask, WorkItem
 
 
 class SectionState:
@@ -53,18 +53,20 @@ class BaseSection(Static):
     BaseSection #title {
         padding: 0;
         margin: 0;
+        width: 1fr;
+    }
+
+    BaseSection #spinner-container {
+        display: none;
+        width: auto;
+        height: auto;
+        padding: 0;
+        margin: 0;
     }
 
     BaseSection #content {
         height: 1fr;
         width: 100%;
-    }
-
-    BaseSection #spinner-container {
-        display: none;
-        height: 100%;
-        width: 100%;
-        content-align: center middle;
     }
 
     BaseSection #data-table {
@@ -94,14 +96,14 @@ class BaseSection(Static):
     def compose(self) -> ComposeResult:
         """Compose the section layout."""
         with Vertical():
-            # Header with title
+            # Header with title and spinner
             with Horizontal(id="header"):
                 yield Label(self.section_title, id="title")
+                with Vertical(id="spinner-container"):
+                    yield LoadingIndicator(id="spinner")
 
             # Content area for data table, loading indicator, or messages
             with Vertical(id="content"):
-                with Vertical(id="spinner-container"):
-                    yield LoadingIndicator(id="spinner")
                 yield DataTable[str](id="data-table")
                 yield Label("", id="message")
 
@@ -392,7 +394,7 @@ class MergeRequestContainer(Static):
         self.opened_by_me_section = MergeRequestSection(id="mr-opened-by-me")
         self.opened_by_me_section.section_title = "Opened by me"
         self.assigned_to_me_section = MergeRequestSection(id="mr-assigned-to-me")
-        self.assigned_to_me_section.section_title = "Assigned to me"
+        self.assigned_to_me_section.section_title = "Assigned / Pending review"
 
     def compose(self) -> ComposeResult:
         """Compose the container with two MR subsections."""
@@ -516,18 +518,19 @@ class MergeRequestContainer(Static):
 
 
 class WorkItemSection(BaseSection):
-    """Section widget for displaying Jira work items.
+    """Section widget for displaying work items (Jira and Todoist).
 
     Displays work items in a DataTable with columns:
-    - Key (Jira issue key like PROJ-123)
+    - Icon (adapter icon emoji)
+    - Key (Jira issue key or Todoist task ID)
     - Title (truncated if too long)
-    - Status (TODO, IN PROGRESS, etc.)
-    - Priority (High, Medium, etc.)
-    - Assignee (display name or Unassigned)
-    - Created (date if available)
+    - Status (TODO, IN PROGRESS, OPEN, DONE, etc.)
+    - Priority (High, Medium, Low, etc.)
+    - Context (Assignee for Jira, Project for Todoist)
+    - Date (due date for Todoist, empty for Jira)
     """
 
-    work_items: reactive[list[JiraWorkItem]] = reactive([])
+    work_items: reactive[list[WorkItem]] = reactive([])
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         """Initialize the work item section."""
@@ -536,7 +539,7 @@ class WorkItemSection(BaseSection):
 
     def _get_empty_message(self) -> str:
         """Return empty state message for work items."""
-        return "No assigned work items"
+        return "No work items"
 
     def on_mount(self) -> None:
         """Handle mount event and setup table."""
@@ -554,23 +557,24 @@ class WorkItemSection(BaseSection):
         table.zebra_stripes = True
         table.show_header = True
         table.add_columns(
+            "Icon",
             "Key",
             "Title",
             "Status",
             "Priority",
-            "Assignee",
-            "Created",
+            "Context",
+            "Date",
         )
 
     def watch_work_items(self) -> None:
         """React to work items data changes."""
         self.update_data(self.work_items)
 
-    def update_data(self, work_items: list[JiraWorkItem]) -> None:
+    def update_data(self, work_items: list[WorkItem]) -> None:
         """Update the section with work item data.
 
         Args:
-            work_items: List of JiraWorkItem models to display.
+            work_items: List of WorkItem models (JiraWorkItem or TodoistTask).
         """
         self.work_items = work_items
         self._item_count = len(work_items)
@@ -585,23 +589,54 @@ class WorkItemSection(BaseSection):
             self.state = SectionState.EMPTY
             return
 
-        # Add rows
+        # Add rows based on adapter type
+        added_count = 0
         for item in work_items:
-            assignee = item.assignee or "Unassigned"
-            # Jira items don't have created_at in our model, so we show empty
-            created = ""
+            try:
+                icon = item.adapter_icon
+                key = item.display_key()
 
-            self._data_table.add_row(
-                item.display_key(),
-                self._truncate_title(item.summary),
-                item.display_status(),
-                item.priority,
-                assignee,
-                created,
-                key=item.url,  # Store URL for browser opening
-            )
+                # Extract title and status
+                if item.adapter_type == "jira":
+                    # JiraWorkItem
+                    title = self._truncate_title(item.summary)  # type: ignore[attr-defined]
+                    status = item.display_status()
+                    priority = item.priority  # type: ignore[attr-defined]
+                    context = item.assignee or "Unassigned"  # type: ignore[attr-defined]
+                    date_str = ""
+                    url = item.url
+                elif item.adapter_type == "todoist":
+                    # TodoistTask
+                    title = self._truncate_title(item.content)  # type: ignore[attr-defined]
+                    status = item.display_status()
+                    priority = TodoistTask.priority_label(item.priority)  # type: ignore[attr-defined]
+                    context = item.project_name  # type: ignore[attr-defined]
+                    date_str = item.due_date or ""  # type: ignore[attr-defined]
+                    url = item.url
+                else:
+                    # Unknown adapter type, skip
+                    continue
 
-        self.state = SectionState.DATA
+                self._data_table.add_row(
+                    icon,
+                    key,
+                    title,
+                    status,
+                    priority,
+                    context,
+                    date_str,
+                    key=url,  # Store URL for browser opening
+                )
+                added_count += 1
+            except Exception:
+                # Skip items that fail to process
+                continue
+
+        # Show data if we added any rows, otherwise show empty state
+        if added_count > 0:
+            self.state = SectionState.DATA
+        else:
+            self.state = SectionState.EMPTY
 
     def get_selected_url(self) -> str | None:
         """Get the URL of the currently selected row.

@@ -291,7 +291,7 @@ class TestWorkItemSection:
 
             assert section.state == SectionState.EMPTY
             message = section.query_one("#message")
-            assert "No assigned work items" in str(message.render())
+            assert "No work items" in str(message.render())
 
     @pytest.mark.asyncio
     async def test_data_updates_table(self, sample_work_items: list[JiraWorkItem]) -> None:
@@ -324,7 +324,7 @@ class TestWorkItemSection:
                 data_table.ordered_columns[i].label.plain
                 for i in range(len(data_table.ordered_columns))
             ]
-            assert columns == ["Key", "Title", "Status", "Priority", "Assignee", "Created"]
+            assert columns == ["Icon", "Key", "Title", "Status", "Priority", "Context", "Date"]
 
     @pytest.mark.asyncio
     async def test_unassigned_work_item(self) -> None:
