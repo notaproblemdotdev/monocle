@@ -16,7 +16,7 @@ from monocli import get_logger
 from monocli.db.connection import get_db_manager
 
 if TYPE_CHECKING:
-    from monocli.models import MergeRequest, WorkItem
+    from monocli.models import MergeRequest, PieceOfWork
 
 
 logger = get_logger(__name__)
@@ -183,7 +183,7 @@ class CacheManager:
         except Exception as e:
             logger.error("Failed to cache merge requests", error=str(e))
 
-    async def get_work_items(self, accept_stale: bool = False) -> list[WorkItem] | None:
+    async def get_work_items(self, accept_stale: bool = False) -> list[PieceOfWork] | None:
         """Get cached work items if not expired.
 
         Args:
@@ -219,7 +219,7 @@ class CacheManager:
             # Parse JSON back to models
             from monocli.models import JiraWorkItem, TodoistTask
 
-            items: list[WorkItem] = []
+            items: list[PieceOfWork] = []
             for adapter_type, raw_json in rows:
                 try:
                     data = json.loads(raw_json)
@@ -244,11 +244,11 @@ class CacheManager:
             logger.error("Failed to get cached work items", error=str(e))
             return None
 
-    async def set_work_items(self, items: list[WorkItem]) -> None:
+    async def set_work_items(self, items: list[PieceOfWork]) -> None:
         """Store work items in cache.
 
         Args:
-            items: List of WorkItem models to cache.
+            items: List of PieceOfWork models to cache.
         """
         try:
             db = get_db_manager()
@@ -276,10 +276,10 @@ class CacheManager:
                         (
                             item.key,
                             "jira",
-                            item.summary,
+                            item.title,
                             item.status,
                             item.url,
-                            item.priority,
+                            str(item.priority) if item.priority else "",
                             item.assignee or "",
                             None,  # created_at not available in Jira model
                             json.dumps(data),

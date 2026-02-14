@@ -1,7 +1,7 @@
 """Main screen for the Mono CLI dashboard.
 
-Provides MainScreen class that composes MergeRequestSection and WorkItemSection
-into a 50/50 vertical layout with async data fetching from GitLab and Jira.
+Provides MainScreen class that composes CodeReviewSection and PieceOfWorkSection
+into a 50/50 vertical layout with async data fetching from various sources.
 
 Features:
 - SQLite caching for offline mode and fast startup
@@ -23,7 +23,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Label
 
-from monocli.ui.sections import MergeRequestContainer, WorkItemSection
+from monocli.ui.sections import CodeReviewSection, PieceOfWorkSection
 from monocli.ui.topbar import TopBar
 
 if TYPE_CHECKING:
@@ -145,26 +145,32 @@ class MainScreen(Screen):
         from monocli import __version__
 
         with Vertical(id="sections-container"):
-            # App title above the merge requests section
+            # App title above the code reviews section
             yield TopBar(version=__version__, id="topbar")
 
-            # Top section: Merge Requests (with two subsections)
+            # Top section: Code Reviews (with two subsections)
             with Vertical(id="mr-container"):
-                yield Label("Pull/merge requests", classes="section-label")
-                self.mr_container = MergeRequestContainer()
-                yield self.mr_container
+                yield Label("Code Reviews", classes="section-label")
+                self.code_review_section = CodeReviewSection()
+                yield self.code_review_section
 
             # Bottom section: Work Items
             with Vertical(id="work-container"):
-                self.work_section = WorkItemSection()
-                yield self.work_section
+                self.piece_of_work_section = PieceOfWorkSection()
+                yield self.piece_of_work_section
 
     async def on_mount(self) -> None:
-        """Handle mount event - initialize database and load data."""
-        from monocli.db.connection import get_db_manager
-        from monocli.db.cache import CacheManager
-        from monocli.db.preferences import PreferencesManager
+        """Handle mount event - initialize database and load data.
+
+        Flow:
+        1. Initialize database
+        2. Load cached data from DB immediately (for fast startup)
+        3. Start background worker to fetch fresh data from CLIs
+        """
         from monocli.config import get_config
+        from monocli.db.cache import CacheManager
+        from monocli.db.connection import get_db_manager
+        from monocli.db.preferences import PreferencesManager
 
         # Initialize database
         db = get_db_manager()
@@ -178,8 +184,12 @@ class MainScreen(Screen):
         # Restore UI state from preferences
         await self._restore_ui_state()
 
-        # Start detection and fetch - show cached data first, then refresh
-        self.detect_and_fetch()
+        # Step 1: Load cached data from DB immediately for fast startup
+        await self._load_cached_data()
+
+        # Step 2: Start background fetch from CLIs (unless offline mode)
+        if not config.offline_mode:
+            self.run_worker(self._fetch_all_data_from_clis(), exclusive=True)
 
     async def _restore_ui_state(self) -> None:
         """Restore last active section from preferences."""
@@ -188,9 +198,9 @@ class MainScreen(Screen):
             self.active_mr_subsection = await self._prefs.get_last_mr_subsection("assigned")
 
             # Update UI to reflect restored state
-            self.mr_container.focus_section(self.active_mr_subsection)
+            self.code_review_section.focus_section(self.active_mr_subsection)
             if self.active_section == "work":
-                self.work_section.focus_table()
+                self.piece_of_work_section.focus_table()
         except Exception:
             # Ignore errors restoring state
             pass
@@ -204,160 +214,175 @@ class MainScreen(Screen):
             # Ignore errors saving state
             pass
 
-    def detect_and_fetch(self) -> None:
-        """Detect available CLIs and start data fetching.
+    async def _load_cached_data(self) -> None:
+        """Load cached data from database for immediate display.
 
-        Uses DetectionRegistry to check which CLIs are available,
-        then starts async workers to fetch data from each.
-
-        Shows cached data immediately if available, then refreshes in background.
+        This provides fast startup by showing cached data immediately,
+        while fresh data is fetched in the background.
         """
-        # Start fetch workers - use background loading
-        self.run_worker(self._fetch_all_data(), exclusive=True)
-
-    async def _fetch_all_data(self) -> None:
-        """Fetch all data concurrently with semaphore protection.
-
-        Uses asyncio.gather() to run GitLab and Jira fetches in parallel,
-        reducing total load time. The subprocess semaphore in async_utils
-        prevents race conditions in asyncio's subprocess transport cleanup.
-        """
-        await asyncio.gather(
-            self.fetch_merge_requests(),
-            self.fetch_work_items(),
-            return_exceptions=True,
-        )
-
-    async def fetch_merge_requests(self) -> None:
-        """Fetch merge requests from GitLab with caching.
-
-        First tries to show cached data (if available), then fetches fresh
-        data in background. Falls back to stale cache if API fails.
-        """
-        from monocli.adapters.gitlab import GitLabAdapter
-        from monocli.config import ConfigError, get_config
         from monocli import get_logger
 
         logger = get_logger(__name__)
+        logger.info("Loading cached data from database")
 
-        config = get_config()
-        adapter = GitLabAdapter()
-
-        # Check if we should use offline mode
-        if config.offline_mode:
-            logger.info("Offline mode enabled, skipping API fetch for MRs")
-        else:
-            # Try to fetch from cache first (for fast UI)
-            cached_assigned = await self._cache.get_merge_requests("assigned", accept_stale=True)
-            cached_opened = await self._cache.get_merge_requests("opened", accept_stale=True)
-
-            if cached_assigned is not None or cached_opened is not None:
-                # Show cached data immediately
-                if cached_assigned is not None:
-                    self.mr_container.update_assigned_to_me(cached_assigned)
-                if cached_opened is not None:
-                    self.mr_container.update_opened_by_me(cached_opened)
-
-                # Check if cache is stale
-                is_fresh = await self._cache.is_cache_valid("merge_requests")
-                self.mr_offline = not is_fresh
-
-        # If offline mode is enabled and we have no data, we're done
-        if config.offline_mode:
-            # Try to get stale data
+        # Load cached merge requests
+        try:
             cached_assigned = await self._cache.get_merge_requests("assigned", accept_stale=True)
             cached_opened = await self._cache.get_merge_requests("opened", accept_stale=True)
 
             if cached_assigned:
-                self.mr_container.update_assigned_to_me(cached_assigned)
+                code_reviews_assigned = [
+                    self._convert_mr_to_code_review(mr) for mr in cached_assigned
+                ]
+                self.code_review_section.update_assigned_to_me(code_reviews_assigned)
+                logger.debug(f"Loaded {len(cached_assigned)} assigned MRs from cache")
+
             if cached_opened:
-                self.mr_container.update_opened_by_me(cached_opened)
+                code_reviews_opened = [self._convert_mr_to_code_review(mr) for mr in cached_opened]
+                self.code_review_section.update_opened_by_me(code_reviews_opened)
+                logger.debug(f"Loaded {len(cached_opened)} opened MRs from cache")
+
+            # Check if cache is fresh
+            is_fresh = await self._cache.is_cache_valid("merge_requests")
+            self.mr_offline = not is_fresh
 
             if not cached_assigned and not cached_opened:
-                self.mr_container.set_error("Offline mode: No cached data available")
+                logger.debug("No cached merge requests found")
 
-            self.mr_offline = True
-            return
+        except Exception as e:
+            logger.warning("Failed to load cached merge requests", error=str(e))
 
-        # Now try to fetch fresh data
-        self.mr_loading = True
-        self.mr_container.show_loading()
+        # Load cached work items
+        try:
+            cached_items = await self._cache.get_work_items(accept_stale=True)
 
-        if not adapter.is_available():
-            # Try cache even if CLI not available
-            cached_assigned = await self._cache.get_merge_requests("assigned", accept_stale=True)
-            cached_opened = await self._cache.get_merge_requests("opened", accept_stale=True)
+            if cached_items:
+                self.piece_of_work_section.update_data(cached_items)
+                logger.debug(f"Loaded {len(cached_items)} work items from cache")
 
-            if cached_assigned or cached_opened:
-                if cached_assigned:
-                    self.mr_container.update_assigned_to_me(cached_assigned)
-                if cached_opened:
-                    self.mr_container.update_opened_by_me(cached_opened)
-                self.mr_offline = True
+                # Check if cache is fresh
+                is_fresh = await self._cache.is_cache_valid("work_items")
+                self.work_offline = not is_fresh
             else:
-                self.mr_container.set_error("glab CLI not found")
+                logger.debug("No cached work items found")
 
-            self.mr_loading = False
+        except Exception as e:
+            logger.warning("Failed to load cached work items", error=str(e))
+
+    async def _fetch_all_data_from_clis(self) -> None:
+        """Fetch fresh data from CLI sources in the background.
+
+        Uses asyncio.gather() to run fetches in parallel.
+        Updates the UI with fresh data when complete.
+        """
+        from monocli import get_logger
+
+        logger = get_logger(__name__)
+        logger.info("Starting background fetch from CLI sources")
+
+        await asyncio.gather(
+            self.fetch_code_reviews(),
+            self.fetch_work_items(),
+            return_exceptions=True,
+        )
+
+        logger.info("Background fetch from CLI sources complete")
+
+    def _convert_mr_to_code_review(self, mr):
+        """Convert a MergeRequest model to a CodeReview model."""
+        from monocli.models import CodeReview
+
+        author = mr.author.get("name") or mr.author.get("username") or "Unknown"
+        return CodeReview(
+            id=str(mr.iid),
+            key=mr.display_key(),
+            title=mr.title,
+            state="open" if mr.state == "opened" else mr.state,
+            author=author,
+            source_branch=mr.source_branch,
+            url=str(mr.web_url),
+            created_at=mr.created_at,
+            draft=mr.draft,
+            adapter_type="gitlab",
+            adapter_icon="🦊",
+        )
+
+    async def fetch_code_reviews(self) -> None:
+        """Fetch fresh code reviews from all registered CLI sources.
+
+        This method fetches fresh data from CLI sources and updates the UI.
+        Cached data is loaded separately in _load_cached_data() for fast startup.
+        Falls back to stale cache if API fails.
+        """
+        from monocli import get_logger
+        from monocli.config import ConfigError, get_config
+        from monocli.sources import SourceRegistry
+        from monocli.sources.github import GitHubSource
+        from monocli.sources.gitlab import GitLabCodeReviewSource
+
+        logger = get_logger(__name__)
+
+        config = get_config()
+
+        # Skip if offline mode is enabled
+        if config.offline_mode:
+            logger.info("Offline mode enabled, skipping CLI fetch for code reviews")
             return
+
+        registry = SourceRegistry()
+
+        # Register code review sources
+        try:
+            group = config.require_gitlab_group()
+            registry.register_code_review_source(GitLabCodeReviewSource(group=group))
+        except ConfigError:
+            logger.debug("GitLab group not configured, skipping GitLab source")
+
+        registry.register_code_review_source(GitHubSource())
+
+        # Fetch fresh data from CLIs
+        self.mr_loading = True
+        self.code_review_section.show_loading("Fetching code reviews...")
 
         try:
-            is_auth = await adapter.check_auth()
-            if not is_auth:
-                # Try cache even if not authenticated
-                cached_assigned = await self._cache.get_merge_requests(
-                    "assigned", accept_stale=True
-                )
-                cached_opened = await self._cache.get_merge_requests("opened", accept_stale=True)
+            # Fetch from all sources
+            results = await registry.fetch_all_code_reviews(
+                include_assigned=True,
+                include_authored=True,
+                include_pending_review=True,
+            )
 
-                if cached_assigned or cached_opened:
-                    if cached_assigned:
-                        self.mr_container.update_assigned_to_me(cached_assigned)
-                    if cached_opened:
-                        self.mr_container.update_opened_by_me(cached_opened)
-                    self.mr_offline = True
-                else:
-                    self.mr_container.set_error("glab not authenticated")
+            # Combine results from all sources
+            all_assigned: list = []
+            all_authored: list = []
 
-                self.mr_loading = False
-                return
+            for source_type, reviews in results.items():
+                for review in reviews:
+                    # Separate into assigned and authored
+                    # (for now, put everything in assigned)
+                    all_assigned.append(review)
 
-            # Get group from config
-            try:
-                group = config.require_gitlab_group()
-            except ConfigError as e:
-                self.mr_container.set_error(str(e))
-                self.mr_loading = False
-                return
+            # Deduplicate by URL
+            seen_urls = set()
+            deduped_assigned = []
+            for review in all_assigned:
+                if review.url not in seen_urls:
+                    seen_urls.add(review.url)
+                    deduped_assigned.append(review)
 
-            # Fetch MRs assigned to me
-            assigned_mrs = await adapter.fetch_assigned_mrs(group=group, assignee="@me")
-
-            # Fetch MRs where I need to do a review
-            pending_review_mrs = await adapter.fetch_assigned_mrs(group=group, reviewer="@me")
-
-            # Combine assigned and pending reviews (removing duplicates by IID)
-            all_assigned = {mr.iid: mr for mr in assigned_mrs}
-            for mr in pending_review_mrs:
-                if mr.iid not in all_assigned:
-                    all_assigned[mr.iid] = mr
-            combined_assigned = list(all_assigned.values())
-
-            # Fetch MRs authored by me (pass empty assignee to avoid glab conflict)
-            authored_mrs = await adapter.fetch_assigned_mrs(group=group, assignee="", author="@me")
-
-            # Update each subsection with its specific data
-            self.mr_container.update_assigned_to_me(combined_assigned)
-            self.mr_container.update_opened_by_me(authored_mrs)
+            # Update sections
+            self.code_review_section.update_assigned_to_me(deduped_assigned)
+            self.code_review_section.update_opened_by_me(all_authored)
 
             # Cache the fresh data
-            await self._cache.set_merge_requests("assigned", combined_assigned)
-            await self._cache.set_merge_requests("opened", authored_mrs)
+            await self._cache.set_merge_requests("assigned", deduped_assigned)
+            await self._cache.set_merge_requests("opened", all_authored)
 
             # Mark as online (not offline)
             self.mr_offline = False
 
         except Exception as e:
-            logger.error("Failed to fetch merge requests", error=str(e))
+            logger.error("Failed to fetch code reviews", error=str(e))
 
             # Try to use stale cache as fallback
             cached_assigned = await self._cache.get_merge_requests("assigned", accept_stale=True)
@@ -365,63 +390,48 @@ class MainScreen(Screen):
 
             if cached_assigned or cached_opened:
                 if cached_assigned:
-                    self.mr_container.update_assigned_to_me(cached_assigned)
+                    code_reviews_assigned = [
+                        self._convert_mr_to_code_review(mr) for mr in cached_assigned
+                    ]
+                    self.code_review_section.update_assigned_to_me(code_reviews_assigned)
                 if cached_opened:
-                    self.mr_container.update_opened_by_me(cached_opened)
+                    code_reviews_opened = [
+                        self._convert_mr_to_code_review(mr) for mr in cached_opened
+                    ]
+                    self.code_review_section.update_opened_by_me(code_reviews_opened)
                 self.mr_offline = True
             else:
-                self.mr_container.set_error(str(e))
+                self.code_review_section.set_error(str(e))
         finally:
             self.mr_loading = False
 
     async def fetch_work_items(self) -> None:
-        """Fetch work items from Jira and Todoist with caching.
+        """Fetch fresh work items from Jira and Todoist CLI sources.
 
-        First tries to show cached data (if available), then fetches fresh
-        data in background. Falls back to stale cache if APIs fail.
+        This method fetches fresh data from CLI sources and updates the UI.
+        Cached data is loaded separately in _load_cached_data() for fast startup.
+        Falls back to stale cache if APIs fail.
         """
+        from monocli import get_logger
         from monocli.adapters.jira import JiraAdapter
         from monocli.adapters.todoist import TodoistAdapter
         from monocli.config import get_config
-        from monocli import get_logger
         from monocli.models import WorkItem
 
         logger = get_logger(__name__)
 
         config = get_config()
-        items: list[WorkItem] = []
 
-        # Check if we should use offline mode
+        # Skip if offline mode is enabled
         if config.offline_mode:
-            logger.info("Offline mode enabled, skipping API fetch for work items")
-        else:
-            # Try to fetch from cache first (for fast UI)
-            cached_items = await self._cache.get_work_items(accept_stale=True)
-
-            if cached_items is not None:
-                # Show cached data immediately
-                items.extend(cached_items)
-                self.work_section.update_data(cached_items)
-
-                # Check if cache is stale
-                is_fresh = await self._cache.is_cache_valid("work_items")
-                self.work_offline = not is_fresh
-
-        # If offline mode is enabled and we have no data, we're done
-        if config.offline_mode:
-            cached_items = await self._cache.get_work_items(accept_stale=True)
-
-            if cached_items:
-                self.work_section.update_data(cached_items)
-            else:
-                self.work_section.set_error("Offline mode: No cached data available")
-
-            self.work_offline = True
+            logger.info("Offline mode enabled, skipping CLI fetch for work items")
             return
 
-        # Now try to fetch fresh data
+        items: list[WorkItem] = []
+
+        # Fetch fresh data from CLIs
         self.work_loading = True
-        self.work_section.show_loading()
+        self.piece_of_work_section.show_loading("Fetching work items...")
 
         # Fetch from Jira
         jira_items = []
@@ -456,7 +466,7 @@ class MainScreen(Screen):
         if items:
             # Sort: open items first, then by display key for stability
             items.sort(key=lambda i: (not i.is_open(), i.display_key()))
-            self.work_section.update_data(items)
+            self.piece_of_work_section.update_data(items)
 
             # Cache the fresh data
             await self._cache.set_work_items(items)
@@ -468,10 +478,10 @@ class MainScreen(Screen):
             cached_items = await self._cache.get_work_items(accept_stale=True)
 
             if cached_items:
-                self.work_section.update_data(cached_items)
+                self.piece_of_work_section.update_data(cached_items)
                 self.work_offline = True
             else:
-                self.work_section.set_error("No work item sources available")
+                self.piece_of_work_section.set_error("No work item sources available")
 
         self.work_loading = False
 
@@ -522,15 +532,15 @@ class MainScreen(Screen):
             # Switch between MR subsections or to Work section
             if self.active_mr_subsection == "assigned":
                 self.active_mr_subsection = "opened"
-                self.mr_container.focus_section("opened")
+                self.code_review_section.focus_section("opened")
             else:
                 self.active_section = "work"
-                self.work_section.focus_table()
+                self.piece_of_work_section.focus_table()
         else:
             # From Work section, go back to MR "Assigned to me"
             self.active_section = "mr"
             self.active_mr_subsection = "assigned"
-            self.mr_container.focus_section("assigned")
+            self.code_review_section.focus_section("assigned")
 
     def action_switch_section(self) -> None:
         """Action handler for switching sections."""
@@ -547,9 +557,9 @@ class MainScreen(Screen):
         url: str | None = None
 
         if self.active_section == "mr":
-            url = self.mr_container.get_selected_url(self.active_mr_subsection)
+            url = self.code_review_section.get_selected_url(self.active_mr_subsection)
         else:
-            url = self.work_section.get_selected_url()
+            url = self.piece_of_work_section.get_selected_url()
 
         if url:
             try:
@@ -573,7 +583,7 @@ class MainScreen(Screen):
     async def _refresh_merge_requests(self) -> None:
         """Refresh merge requests (invalidate cache first)."""
         await self._cache.invalidate("merge_requests")
-        await self.fetch_merge_requests()
+        await self.fetch_code_reviews()
 
     async def _refresh_work_items(self) -> None:
         """Refresh work items (invalidate cache first)."""
@@ -583,16 +593,16 @@ class MainScreen(Screen):
     def action_move_down(self) -> None:
         """Action handler to move selection down."""
         if self.active_section == "mr":
-            self.mr_container.select_next(self.active_mr_subsection)
+            self.code_review_section.select_next(self.active_mr_subsection)
         else:
-            self.work_section.select_next()
+            self.piece_of_work_section.select_next()
 
     def action_move_up(self) -> None:
         """Action handler to move selection up."""
         if self.active_section == "mr":
-            self.mr_container.select_previous(self.active_mr_subsection)
+            self.code_review_section.select_previous(self.active_mr_subsection)
         else:
-            self.work_section.select_previous()
+            self.piece_of_work_section.select_previous()
 
     def action_quit(self) -> None:
         """Quit the application."""

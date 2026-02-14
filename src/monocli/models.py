@@ -46,21 +46,47 @@ class DueInfo(TypedDict, total=False):
 
 
 @runtime_checkable
-class WorkItem(Protocol):
-    """Protocol for items displayable in the WorkItemSection.
+class PieceOfWork(Protocol):
+    """Protocol for all work items across platforms.
 
-    Both JiraWorkItem and TodoistTask satisfy this protocol structurally.
+    Unifies Jira issues, GitHub issues, GitLab tasks, Linear issues, and Todoist tasks
+    into a common interface for the WorkItemSection.
     """
 
+    # Adapter metadata
     adapter_icon: str
     adapter_type: str
 
+    # Core properties
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def priority(self) -> int | None: ...
+
+    @property
+    def url(self) -> str: ...
+
+    @property
+    def assignee(self) -> str | None: ...
+
+    @property
+    def due_date(self) -> str | None: ...
+
+    # Display methods
     def display_key(self) -> str: ...
     def display_status(self) -> str: ...
     def is_open(self) -> bool: ...
 
-    @property
-    def url(self) -> str: ...
+
+# Backwards compatibility alias
+WorkItem = PieceOfWork
 
 
 class WorkItemStatus(str, Enum):
@@ -70,6 +96,57 @@ class WorkItemStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     BLOCKED = "blocked"
+
+
+class CodeReview(BaseModel):
+    """Code review model for merge requests and pull requests.
+
+    Unifies GitLab MRs and GitHub PRs into a common interface
+    for the CodeReviewSection.
+
+    Attributes:
+        id: Unique identifier (MR IID or PR number)
+        key: Display key (e.g., "!123" or "#456")
+        title: MR/PR title
+        state: State ("open", "closed", "merged")
+        author: Author name or login
+        source_branch: Source branch (for display)
+        url: Link to MR/PR
+        created_at: Creation timestamp
+        draft: Whether this is a draft
+        adapter_type: Source adapter type ("gitlab", "github")
+        adapter_icon: Emoji icon for the adapter
+    """
+
+    model_config = ConfigDict(strict=True, validate_assignment=True)
+
+    id: str = Field(..., description="Unique identifier")
+    key: str = Field(..., description="Display key (e.g., !123 or #456)")
+    title: str = Field(..., description="MR/PR title", min_length=1)
+    state: str = Field(
+        ...,
+        description="MR/PR state",
+        pattern=r"^(open|closed|merged)$",
+    )
+    author: str = Field(..., description="Author name or login")
+    source_branch: str = Field(default="", description="Source branch name")
+    url: str = Field(..., description="MR/PR URL")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    draft: bool = Field(default=False, description="Whether this is a draft")
+    adapter_type: str = Field(..., description="Source adapter type")
+    adapter_icon: str = Field(..., description="Emoji icon for the adapter")
+
+    def display_key(self) -> str:
+        """Return formatted key for display."""
+        return self.key
+
+    def display_status(self) -> str:
+        """Return normalized status string."""
+        return self.state.upper()
+
+    def is_open(self) -> bool:
+        """Check if code review is open/ongoing."""
+        return self.state == "open"
 
 
 class Priority(str, Enum):
@@ -186,8 +263,8 @@ class MergeRequest(BaseModel):
         return self.state == "opened"
 
 
-class GitHubIssue(BaseModel):
-    """GitHub Issue model.
+class GitHubPieceOfWork(BaseModel):
+    """GitHub Issue model implementing PieceOfWork protocol.
 
     Validates GitHub Issue data from gh CLI --json output.
 
@@ -204,6 +281,9 @@ class GitHubIssue(BaseModel):
     """
 
     model_config = ConfigDict(strict=True, validate_assignment=True)
+
+    adapter_icon: str = "🐙"
+    adapter_type: str = "github"
 
     number: int = Field(..., description="Issue number", ge=1)
     title: str = Field(..., description="Issue title", min_length=1)
@@ -231,6 +311,38 @@ class GitHubIssue(BaseModel):
         description="List of assignee information",
     )
 
+    @property
+    def id(self) -> str:
+        """Get the issue ID."""
+        return str(self.number)
+
+    @property
+    def status(self) -> str:
+        """Get the issue status."""
+        return self.state
+
+    @property
+    def priority(self) -> int | None:
+        """GitHub issues don't have priorities."""
+        return None
+
+    @property
+    def assignee(self) -> str | None:
+        """Get the first assignee's login."""
+        if self.assignees:
+            return self.assignees[0].get("login")
+        return None
+
+    @property
+    def due_date(self) -> str | None:
+        """GitHub issues don't have due dates in basic fields."""
+        return None
+
+    @property
+    def url(self) -> str:
+        """Get URL as string."""
+        return str(self.html_url)
+
     def display_key(self) -> str:
         """Return formatted key for display."""
         return f"#{self.number}"
@@ -244,10 +356,15 @@ class GitHubIssue(BaseModel):
         return self.state == "open"
 
 
-class JiraWorkItem(BaseModel):
+# Backwards compatibility alias
+GitHubIssue = GitHubPieceOfWork
+
+
+class JiraPieceOfWork(BaseModel):
     """Jira Work Item model.
 
     Validates Jira issue data from acli CLI --json output.
+    Implements the PieceOfWork protocol.
 
     Attributes:
         key: Issue key (e.g., "PROJ-123")
@@ -278,7 +395,12 @@ class JiraWorkItem(BaseModel):
     self: HttpUrl = Field(..., description="Issue API URL")
 
     @property
-    def summary(self) -> str:
+    def id(self) -> str:
+        """Get the issue ID (key)."""
+        return self.key
+
+    @property
+    def title(self) -> str:
         """Get the issue summary/title."""
         value = self.fields.get("summary", "")
         return str(value) if value is not None else ""
@@ -290,10 +412,21 @@ class JiraWorkItem(BaseModel):
         return status_field.get("name", "Unknown") if isinstance(status_field, dict) else "Unknown"
 
     @property
-    def priority(self) -> str:
-        """Get the issue priority name."""
+    def priority(self) -> int | None:
+        """Get the issue priority as a numeric value (1-5)."""
         priority_field = self.fields.get("priority", {})
-        return priority_field.get("name", "None") if isinstance(priority_field, dict) else "None"
+        priority_name = (
+            priority_field.get("name", "None") if isinstance(priority_field, dict) else "None"
+        )
+        # Map Jira priority names to numeric values
+        priority_map = {
+            "Lowest": 1,
+            "Low": 2,
+            "Medium": 3,
+            "High": 4,
+            "Highest": 5,
+        }
+        return priority_map.get(priority_name)
 
     @property
     def assignee(self) -> str | None:
@@ -301,6 +434,11 @@ class JiraWorkItem(BaseModel):
         assignee_field = self.fields.get("assignee")
         if isinstance(assignee_field, dict):
             return assignee_field.get("displayName")
+        return None
+
+    @property
+    def due_date(self) -> str | None:
+        """Get due date if available (Jira doesn't expose this directly in basic fields)."""
         return None
 
     @property
@@ -334,10 +472,15 @@ class JiraWorkItem(BaseModel):
         return self.status.lower() not in closed_statuses
 
 
-class TodoistTask(BaseModel):
+# Backwards compatibility alias
+JiraWorkItem = JiraPieceOfWork
+
+
+class TodoistPieceOfWork(BaseModel):
     """Todoist Task model.
 
     Validates Todoist task data from the Todoist REST API.
+    Implements the PieceOfWork protocol.
 
     Attributes:
         id: Task ID
@@ -369,6 +512,21 @@ class TodoistTask(BaseModel):
     created_at: str | None = Field(default=None, description="When the task was created")
     is_completed: bool = Field(default=False, description="Whether the task is completed")
     completed_at: str | None = Field(default=None, description="When the task was completed")
+
+    @property
+    def title(self) -> str:
+        """Get the task content as title."""
+        return self.content
+
+    @property
+    def status(self) -> str:
+        """Get the task status."""
+        return "done" if self.is_completed else "open"
+
+    @property
+    def assignee(self) -> str | None:
+        """Todoist tasks don't have assignees in the basic model."""
+        return None
 
     @property
     def due_date(self) -> str | None:
@@ -409,3 +567,7 @@ class TodoistTask(BaseModel):
         """
         mapping = {1: "LOW", 2: "MEDIUM", 3: "HIGH", 4: "HIGHEST"}
         return mapping.get(priority, "MEDIUM")
+
+
+# Backwards compatibility alias
+TodoistTask = TodoistPieceOfWork

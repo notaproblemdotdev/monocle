@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Label, LoadingIndicator, Static
+from textual.widgets import DataTable, Label, Static
+
+from monocli.ui.spinner import StatusSpinner
 
 if TYPE_CHECKING:
-    from monocli.models import MergeRequest, TodoistTask, WorkItem
+    from monocli.models import CodeReview, PieceOfWork
 
 
 class SectionState:
@@ -37,6 +39,7 @@ class BaseSection(Static):
     # Reactive state
     state: reactive[str] = reactive(SectionState.LOADING)
     error_message: reactive[str] = reactive("")
+    loading_status: reactive[str] = reactive("")
 
     DEFAULT_CSS = """
     BaseSection {
@@ -56,17 +59,27 @@ class BaseSection(Static):
         width: 1fr;
     }
 
-    BaseSection #spinner-container {
-        display: none;
-        width: auto;
-        height: auto;
-        padding: 0;
-        margin: 0;
-    }
-
     BaseSection #content {
         height: 1fr;
         width: 100%;
+        layout: vertical;
+    }
+
+    BaseSection #content-wrapper {
+        width: 100%;
+        height: 1fr;
+    }
+
+    BaseSection #spinner-row {
+        width: 100%;
+        height: auto;
+        display: none;
+        content-align: right middle;
+        padding: 0 1 0 0;
+    }
+
+    BaseSection #spinner-row StatusSpinner {
+        color: $accent;
     }
 
     BaseSection #data-table {
@@ -96,16 +109,18 @@ class BaseSection(Static):
     def compose(self) -> ComposeResult:
         """Compose the section layout."""
         with Vertical():
-            # Header with title and spinner
+            # Header with title only
             with Horizontal(id="header"):
                 yield Label(self.section_title, id="title")
-                with Vertical(id="spinner-container"):
-                    yield LoadingIndicator(id="spinner")
 
             # Content area for data table, loading indicator, or messages
             with Vertical(id="content"):
-                yield DataTable[str](id="data-table")
-                yield Label("", id="message")
+                with Vertical(id="content-wrapper"):
+                    yield DataTable[str](id="data-table")
+                    yield Label("", id="message")
+                # Spinner row at bottom
+                with Horizontal(id="spinner-row"):
+                    yield StatusSpinner("", id="spinner")
 
     def on_mount(self) -> None:
         """Handle mount event."""
@@ -118,32 +133,32 @@ class BaseSection(Static):
 
     def _update_visibility(self) -> None:
         """Update widget visibility based on current state."""
-        spinner = self.query_one("#spinner", LoadingIndicator)
-        spinner_container = self.query_one("#spinner-container", Vertical)
+        spinner = self.query_one("#spinner", StatusSpinner)
+        spinner_row = self.query_one("#spinner-row", Horizontal)
         table = self.query_one("#data-table", DataTable)
         message = self.query_one("#message", Label)
 
         if self.state == SectionState.LOADING:
-            spinner.styles.display = "block"
-            spinner_container.styles.display = "block"
+            spinner_row.styles.display = "block"
+            spinner.start(self.loading_status)
             table.styles.display = "none"
             message.styles.display = "none"
         elif self.state == SectionState.EMPTY:
-            spinner.styles.display = "none"
-            spinner_container.styles.display = "none"
+            spinner_row.styles.display = "none"
+            spinner.stop()
             table.styles.display = "none"
             message.styles.display = "block"
             message.update(self._get_empty_message())
         elif self.state == SectionState.ERROR:
-            spinner.styles.display = "none"
-            spinner_container.styles.display = "none"
+            spinner_row.styles.display = "none"
+            spinner.stop()
             table.styles.display = "none"
             message.styles.display = "block"
             message.update(f"Error: {self.error_message}")
             message.add_class("error")
         else:  # DATA state
-            spinner.styles.display = "none"
-            spinner_container.styles.display = "none"
+            spinner_row.styles.display = "none"
+            spinner.stop()
             table.styles.display = "block"
             message.styles.display = "none"
 
@@ -158,8 +173,13 @@ class BaseSection(Static):
         """Get the empty state message. Override in subclasses."""
         return "No items found"
 
-    def show_loading(self) -> None:
-        """Set section to loading state."""
+    def show_loading(self, status: str = "") -> None:
+        """Set section to loading state.
+
+        Args:
+            status: Optional status message to display with the spinner.
+        """
+        self.loading_status = status
         self.state = SectionState.LOADING
 
     def set_error(self, message: str) -> None:
@@ -224,28 +244,28 @@ class BaseSection(Static):
             self._data_table.action_cursor_up()
 
 
-class MergeRequestSection(BaseSection):
-    """Section widget for displaying merge requests.
+class CodeReviewSubSection(BaseSection):
+    """Subsection widget for displaying code reviews (MRs/PRs).
 
-    Displays merge requests in a DataTable with columns:
-    - Key (MR number with ! prefix)
+    Displays code reviews in a DataTable with columns:
+    - Key (MR/PR number with ! or # prefix)
     - Title (truncated if too long)
-    - Status (OPENED, CLOSED, etc.)
+    - Status (OPEN, CLOSED, MERGED, etc.)
     - Author (author name or login)
     - Branch (source branch)
     - Created (date)
     """
 
-    merge_requests: reactive[list[MergeRequest]] = reactive([])
+    code_reviews: reactive[list[CodeReview]] = reactive([])
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        """Initialize the merge request section."""
-        super().__init__("Merge Requests", *args, **kwargs)
+        """Initialize the code review subsection."""
+        super().__init__("Code Reviews", *args, **kwargs)
         self._item_count = 0
 
     def _get_empty_message(self) -> str:
-        """Return empty state message for MRs."""
-        return "No merge requests found"
+        """Return empty state message for code reviews."""
+        return "No code reviews found"
 
     def on_mount(self) -> None:
         """Handle mount event and setup table."""
@@ -271,18 +291,18 @@ class MergeRequestSection(BaseSection):
             "Created",
         )
 
-    def watch_merge_requests(self) -> None:
-        """React to merge requests data changes."""
-        self.update_data(self.merge_requests)
+    def watch_code_reviews(self) -> None:
+        """React to code review data changes."""
+        self.update_data(self.code_reviews)
 
-    def update_data(self, merge_requests: list[MergeRequest]) -> None:
-        """Update the section with merge request data.
+    def update_data(self, code_reviews: list[CodeReview]) -> None:
+        """Update the section with code review data.
 
         Args:
-            merge_requests: List of MergeRequest models to display.
+            code_reviews: List of CodeReview models to display.
         """
-        self.merge_requests = merge_requests
-        self._item_count = len(merge_requests)
+        self.code_reviews = code_reviews
+        self._item_count = len(code_reviews)
 
         if self._data_table is None:
             return
@@ -290,23 +310,22 @@ class MergeRequestSection(BaseSection):
         # Clear existing rows
         self._data_table.clear()
 
-        if not merge_requests:
+        if not code_reviews:
             self.state = SectionState.EMPTY
             return
 
         # Add rows
-        for mr in merge_requests:
-            author = mr.author.get("name") or mr.author.get("username") or "Unknown"
-            created = self._format_date(mr.created_at)
+        for cr in code_reviews:
+            created = self._format_date(cr.created_at)
 
             self._data_table.add_row(
-                mr.display_key(),
-                self._truncate_title(mr.title),
-                mr.display_status(),
-                author,
-                mr.source_branch,
+                cr.display_key(),
+                self._truncate_title(cr.title),
+                cr.display_status(),
+                cr.author,
+                cr.source_branch,
                 created,
-                key=str(mr.web_url),  # Store URL for browser opening
+                key=cr.url,  # Store URL for browser opening
             )
 
         self.state = SectionState.DATA
@@ -315,7 +334,7 @@ class MergeRequestSection(BaseSection):
         """Get the URL of the currently selected row.
 
         Returns:
-            The URL of the selected MR, or None if no selection.
+            The URL of the selected code review, or None if no selection.
         """
         if self._data_table is None:
             return None
@@ -339,47 +358,51 @@ class MergeRequestSection(BaseSection):
             elif isinstance(row_key, str):
                 return row_key
 
-            # Fallback: try to get row data and find MR
+            # Fallback: try to get row data and find code review
             row = self._data_table.get_row_at(row_index)
             if row:
                 key = row[0]  # Key column
-                for mr in self.merge_requests:
-                    if mr.display_key() == key:
-                        return str(mr.web_url)
+                for cr in self.code_reviews:
+                    if cr.display_key() == key:
+                        return cr.url
         except (KeyError, IndexError, AttributeError):
             pass
 
         return None
 
 
-class MergeRequestContainer(Static):
-    """Container for merge request sections with responsive layout.
+# Backwards compatibility alias
+MergeRequestSection = CodeReviewSubSection
+
+
+class CodeReviewSection(Static):
+    """Container for code review sections with responsive layout.
 
     Displays two subsections:
-    - "Opened by me": MRs authored by the current user
-    - "Assigned to me": MRs assigned to the current user
+    - "Opened by me": Code reviews authored by the current user
+    - "Assigned to me": Code reviews assigned to the current user
 
     Uses responsive layout: two columns when terminal is wide (>= 100 cols),
     two rows when terminal is narrow (< 100 cols).
     """
 
     DEFAULT_CSS = """
-    MergeRequestContainer {
+    CodeReviewSection {
         height: 100%;
         width: 100%;
     }
 
-    #mr-subsections {
+    #cr-subsections {
         height: 100%;
         width: 100%;
     }
 
-    #mr-subsections > MergeRequestSection {
+    #cr-subsections > CodeReviewSubSection {
         width: 50%;
         height: 100%;
     }
 
-    #mr-subsections.vertical > MergeRequestSection {
+    #cr-subsections.vertical > CodeReviewSubSection {
         width: 100%;
         height: 50%;
     }
@@ -389,16 +412,16 @@ class MergeRequestContainer(Static):
     LAYOUT_THRESHOLD = 100
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        """Initialize the MR container with two subsections."""
+        """Initialize the code review container with two subsections."""
         super().__init__(*args, **kwargs)
-        self.opened_by_me_section = MergeRequestSection(id="mr-opened-by-me")
+        self.opened_by_me_section = CodeReviewSubSection(id="cr-opened-by-me")
         self.opened_by_me_section.section_title = "Opened by me"
-        self.assigned_to_me_section = MergeRequestSection(id="mr-assigned-to-me")
+        self.assigned_to_me_section = CodeReviewSubSection(id="cr-assigned-to-me")
         self.assigned_to_me_section.section_title = "Assigned / Pending review"
 
     def compose(self) -> ComposeResult:
-        """Compose the container with two MR subsections."""
-        with Vertical(id="mr-subsections"):
+        """Compose the container with two code review subsections."""
+        with Vertical(id="cr-subsections"):
             yield self.assigned_to_me_section
             yield self.opened_by_me_section
 
@@ -415,7 +438,7 @@ class MergeRequestContainer(Static):
 
         Uses horizontal layout (columns) when wide, vertical layout (rows) when narrow.
         """
-        subsections = self.query_one("#mr-subsections", Vertical)
+        subsections = self.query_one("#cr-subsections", Vertical)
         width = self.size.width
 
         if width < self.LAYOUT_THRESHOLD:
@@ -427,10 +450,14 @@ class MergeRequestContainer(Static):
             subsections.styles.layout = "horizontal"
             subsections.remove_class("vertical")
 
-    def show_loading(self) -> None:
-        """Set both subsections to loading state."""
-        self.opened_by_me_section.show_loading()
-        self.assigned_to_me_section.show_loading()
+    def show_loading(self, status: str = "") -> None:
+        """Set both subsections to loading state.
+
+        Args:
+            status: Optional status message to display with the spinner.
+        """
+        self.opened_by_me_section.show_loading(status)
+        self.assigned_to_me_section.show_loading(status)
 
     def set_error(self, message: str) -> None:
         """Set both subsections to error state.
@@ -441,23 +468,23 @@ class MergeRequestContainer(Static):
         self.opened_by_me_section.set_error(message)
         self.assigned_to_me_section.set_error(message)
 
-    def update_opened_by_me(self, merge_requests: list[MergeRequest]) -> None:
+    def update_opened_by_me(self, code_reviews: list[CodeReview]) -> None:
         """Update the "Opened by me" subsection.
 
         Args:
-            merge_requests: List of MRs authored by the current user.
+            code_reviews: List of code reviews authored by the current user.
         """
-        self.opened_by_me_section.update_data(merge_requests)
+        self.opened_by_me_section.update_data(code_reviews)
 
-    def update_assigned_to_me(self, merge_requests: list[MergeRequest]) -> None:
+    def update_assigned_to_me(self, code_reviews: list[CodeReview]) -> None:
         """Update the "Assigned to me" subsection.
 
         Args:
-            merge_requests: List of MRs assigned to the current user.
+            code_reviews: List of code reviews assigned to the current user.
         """
-        self.assigned_to_me_section.update_data(merge_requests)
+        self.assigned_to_me_section.update_data(code_reviews)
 
-    def get_active_section(self, section_type: str) -> MergeRequestSection | None:
+    def get_active_section(self, section_type: str) -> CodeReviewSubSection | None:
         """Get one of the subsections by type.
 
         Args:
@@ -479,7 +506,7 @@ class MergeRequestContainer(Static):
             section_type: Either "opened" or "assigned".
 
         Returns:
-            The URL of the selected MR, or None if no selection.
+            The URL of the selected code review, or None if no selection.
         """
         section = self.get_active_section(section_type)
         if section:
@@ -517,23 +544,27 @@ class MergeRequestContainer(Static):
             section.select_previous()
 
 
-class WorkItemSection(BaseSection):
-    """Section widget for displaying work items (Jira and Todoist).
+# Backwards compatibility alias
+MergeRequestContainer = CodeReviewSection
+
+
+class PieceOfWorkSection(BaseSection):
+    """Section widget for displaying pieces of work (Jira, GitHub Issues, Todoist, etc.).
 
     Displays work items in a DataTable with columns:
     - Icon (adapter icon emoji)
-    - Key (Jira issue key or Todoist task ID)
+    - Key (Jira issue key, GitHub issue #, Todoist task ID)
     - Title (truncated if too long)
     - Status (TODO, IN PROGRESS, OPEN, DONE, etc.)
-    - Priority (High, Medium, Low, etc.)
-    - Context (Assignee for Jira, Project for Todoist)
-    - Date (due date for Todoist, empty for Jira)
+    - Priority (numeric priority for sorting)
+    - Context (Assignee or project name)
+    - Date (due date if available)
     """
 
-    work_items: reactive[list[WorkItem]] = reactive([])
+    work_items: reactive[list[PieceOfWork]] = reactive([])
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        """Initialize the work item section."""
+        """Initialize the piece of work section."""
         super().__init__("Work Items", *args, **kwargs)
         self._item_count = 0
 
@@ -570,11 +601,11 @@ class WorkItemSection(BaseSection):
         """React to work items data changes."""
         self.update_data(self.work_items)
 
-    def update_data(self, work_items: list[WorkItem]) -> None:
-        """Update the section with work item data.
+    def update_data(self, work_items: list[PieceOfWork]) -> None:
+        """Update the section with piece of work data.
 
         Args:
-            work_items: List of WorkItem models (JiraWorkItem or TodoistTask).
+            work_items: List of PieceOfWork models.
         """
         self.work_items = work_items
         self._item_count = len(work_items)
@@ -589,33 +620,18 @@ class WorkItemSection(BaseSection):
             self.state = SectionState.EMPTY
             return
 
-        # Add rows based on adapter type
+        # Add rows
         added_count = 0
         for item in work_items:
             try:
                 icon = item.adapter_icon
                 key = item.display_key()
-
-                # Extract title and status
-                if item.adapter_type == "jira":
-                    # JiraWorkItem
-                    title = self._truncate_title(item.summary)  # type: ignore[attr-defined]
-                    status = item.display_status()
-                    priority = item.priority  # type: ignore[attr-defined]
-                    context = item.assignee or "Unassigned"  # type: ignore[attr-defined]
-                    date_str = ""
-                    url = item.url
-                elif item.adapter_type == "todoist":
-                    # TodoistTask
-                    title = self._truncate_title(item.content)  # type: ignore[attr-defined]
-                    status = item.display_status()
-                    priority = TodoistTask.priority_label(item.priority)  # type: ignore[attr-defined]
-                    context = item.project_name  # type: ignore[attr-defined]
-                    date_str = item.due_date or ""  # type: ignore[attr-defined]
-                    url = item.url
-                else:
-                    # Unknown adapter type, skip
-                    continue
+                title = self._truncate_title(item.title)
+                status = item.display_status()
+                priority = str(item.priority) if item.priority else ""
+                context = item.assignee or ""
+                date_str = item.due_date or ""
+                url = item.url
 
                 self._data_table.add_row(
                     icon,
@@ -677,3 +693,7 @@ class WorkItemSection(BaseSection):
             pass
 
         return None
+
+
+# Backwards compatibility alias
+WorkItemSection = PieceOfWorkSection
