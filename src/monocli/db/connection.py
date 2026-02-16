@@ -136,20 +136,13 @@ class DatabaseManager:
         cls._instance = None
 
 
-# Global instance for convenience
-_db_manager: DatabaseManager | None = None
-
-
 def get_db_manager(db_path: str | Path | None = None) -> DatabaseManager:
-    """Get or create global DatabaseManager instance.
+    """Get DatabaseManager instance.
 
     Args:
         db_path: Optional path override (ignored if instance already exists).
 
     Returns:
-        DatabaseManager singleton instance.
+        DatabaseManager instance.
     """
-    global _db_manager
-    if _db_manager is None:
-        _db_manager = DatabaseManager(db_path)
-    return _db_manager
+    return DatabaseManager(db_path)

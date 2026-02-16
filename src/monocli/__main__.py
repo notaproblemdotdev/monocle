@@ -10,6 +10,8 @@ import sys
 
 from monocli import __version__, configure_logging, get_logger
 from monocli.config import ConfigError, validate_keyring_available
+from monocli.db.connection import DatabaseManager
+from monocli.db.cache import CacheManager
 from monocli.ui.app import MonoApp
 
 
@@ -19,8 +21,6 @@ async def clear_cache_command(db_path: str | None = None) -> None:
     Args:
         db_path: Optional path to database file.
     """
-    from monocli.db.connection import DatabaseManager
-    from monocli.db.cache import CacheManager
 
     db = DatabaseManager(db_path)
     async with db:
