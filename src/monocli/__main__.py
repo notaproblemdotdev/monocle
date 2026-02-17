@@ -3,97 +3,151 @@
 Run the dashboard with: python -m monocli
 """
 
-import argparse
-import asyncio
 import os
 import sys
+import typing as t
+import webbrowser
 
-from monocli import __version__, configure_logging, get_logger
-from monocli.config import ConfigError, validate_keyring_available
+import typer
+
+from monocli import __version__
+from monocli import configure_logging
+from monocli import get_logger
+from monocli.config import ConfigError
+from monocli.config import validate_keyring_available
 from monocli.db.connection import DatabaseManager
 from monocli.db.work_store import WorkStore
 from monocli.ui.app import MonoApp
 
+app = typer.Typer(
+    help="Mono CLI Dashboard - Unified view of PRs and work items",
+    no_args_is_help=True,
+)
 
-async def clear_cache_command(db_path: str | None = None) -> None:
-    """Clear all cached data from database.
 
-    Args:
-        db_path: Optional path to database file.
-    """
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"monocli {__version__}")
+        raise typer.Exit()
 
+
+def _apply_env_vars(offline: bool, db_path: str | None) -> None:
+    """Set environment variables from CLI args."""
+    if offline:
+        os.environ["MONOCLI_OFFLINE_MODE"] = "true"
+    if db_path:
+        os.environ["MONOCLI_DB_PATH"] = db_path
+
+
+async def _clear_cache(db_path: str | None = None) -> None:
+    """Clear all cached data from database."""
     db = DatabaseManager(db_path)
     async with db:
-        # Create a minimal WorkStore just to invalidate cache
-        # Source registry not needed for invalidation
         from monocli.sources.registry import SourceRegistry
 
         store = WorkStore(SourceRegistry())
         await store.invalidate()
-        print("Cache cleared successfully.")
 
 
-def main() -> None:
-    """Run the Mono CLI dashboard application."""
-    parser = argparse.ArgumentParser(
-        description="Mono CLI Dashboard - Unified view of PRs and work items"
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging",
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}",
-    )
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Start in offline mode (use cached data only)",
-    )
-    parser.add_argument(
-        "--clear-cache",
-        action="store_true",
-        help="Clear all cached data and exit",
-    )
-    parser.add_argument(
-        "--db-path",
-        type=str,
-        help="Path to SQLite database file (default: ~/.config/monocli/monocli.db)",
-    )
-    args = parser.parse_args()
+@app.callback()
+def main_callback(
+    version: bool = typer.Option(
+        False, "--version", "-v", help="Show version and exit", callback=version_callback
+    ),
+) -> None:
+    """Mono CLI Dashboard - Unified view of PRs and work items."""
 
-    configure_logging(debug=args.debug)
+
+@app.command()
+def tui(
+    debug: t.Annotated[bool, typer.Option("--debug", help="Enable debug logging")] = False,
+    offline: t.Annotated[bool, typer.Option("--offline", help="Use cached data only")] = False,
+    db_path: t.Annotated[
+        str | None,
+        typer.Option("--db-path", help="Path to SQLite database file"),
+    ] = None,
+    clear_cache: t.Annotated[
+        bool,
+        typer.Option("--clear-cache", help="Clear all cached data and exit"),
+    ] = False,
+) -> None:
+    """Run the TUI dashboard in terminal."""
+    import asyncio
+
+    configure_logging(debug=debug)
     logger = get_logger()
-    logger.info("Starting Mono CLI", version=__version__, debug_mode=args.debug)
+    logger.info("Starting Mono CLI TUI", version=__version__, debug_mode=debug)
 
-    # Handle --clear-cache
-    if args.clear_cache:
+    if clear_cache:
         try:
-            asyncio.run(clear_cache_command(args.db_path))
-            return
+            asyncio.run(_clear_cache(db_path))
+            typer.echo("Cache cleared successfully.")
+            raise typer.Exit()
         except Exception as e:
-            print(f"Error clearing cache: {e}", file=sys.stderr)
-            sys.exit(1)
+            typer.echo(f"Error clearing cache: {e}", err=True)
+            raise typer.Exit(1)
 
-    # Set environment variables from CLI args
-    if args.offline:
-        os.environ["MONOCLI_OFFLINE_MODE"] = "true"
-    if args.db_path:
-        os.environ["MONOCLI_DB_PATH"] = args.db_path
+    _apply_env_vars(offline, db_path)
 
-    # Validate keyring availability before starting app
     try:
         validate_keyring_available()
     except ConfigError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
-    app = MonoApp()
-    app.run()
+    mono_app = MonoApp()
+    mono_app.run()
+
+
+@app.command()
+def web(
+    port: t.Annotated[int, typer.Option("--port", "-p", help="Port for web server")] = 6969,
+    no_open: t.Annotated[
+        bool,
+        typer.Option("--no-open", help="Don't open browser automatically"),
+    ] = False,
+    debug: t.Annotated[bool, typer.Option("--debug", help="Enable debug logging")] = False,
+    offline: t.Annotated[bool, typer.Option("--offline", help="Use cached data only")] = False,
+    db_path: t.Annotated[
+        str | None,
+        typer.Option("--db-path", help="Path to SQLite database file"),
+    ] = None,
+) -> None:
+    """Start web server and open dashboard in browser."""
+    from textual_serve.server import Server
+
+    configure_logging(debug=debug)
+    logger = get_logger()
+    logger.info("Starting Mono CLI Web Server", version=__version__, port=port)
+
+    _apply_env_vars(offline, db_path)
+
+    try:
+        validate_keyring_available()
+    except ConfigError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from None
+
+    cmd_parts = [sys.executable, "-m", "monocli", "tui"]
+    if debug:
+        cmd_parts.append("--debug")
+    if offline:
+        cmd_parts.append("--offline")
+    if db_path:
+        cmd_parts.extend(["--db-path", db_path])
+
+    host = "localhost"
+    server = Server(" ".join(cmd_parts), host=host, port=port)
+
+    url = f"http://{host}:{port}"
+    typer.echo(f"Starting web server at {url}")
+
+    if not no_open:
+        typer.echo("Opening browser...")
+        webbrowser.open(url)
+
+    server.serve()
 
 
 if __name__ == "__main__":
-    main()
+    app()
