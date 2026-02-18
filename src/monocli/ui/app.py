@@ -58,8 +58,5 @@ class MonoApp(App):
     def on_unmount(self) -> None:
         pass
 
-    def action_quit(self) -> None:
-        self.exit()
-
     def action_open_setup(self) -> None:
         self.push_screen("setup")

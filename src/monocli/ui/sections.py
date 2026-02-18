@@ -50,19 +50,38 @@ class BaseSection(Static):
     """
 
     BINDINGS = [
-        Binding("o", "open_selected", "Open in Browser"),
-        Binding("j", "move_down", "Down"),
-        Binding("k", "move_up", "Up"),
-        Binding("p", "sort_priority", "Sort Priority"),
-        Binding("s", "sort_status", "Sort Status"),
-        Binding("d", "sort_date", "Sort Date"),
-        Binding("0", "sort_reset", "Reset Sort"),
+        Binding("o", "open_selected", "Open in Browser", show=False),
+        Binding("j", "move_down", "Down", show=False),
+        Binding("k", "move_up", "Up", show=False),
+        Binding("f", "enter_sort_mode", "Format"),
+        Binding("s", "sort_action", "Sort", show=False),
+        Binding("p", "sort_priority", "Priority", show=False),
+        Binding("d", "sort_date", "Date", show=False),
+        Binding("0", "sort_reset", "Reset", show=False),
+        Binding("escape", "exit_sort_mode", "Cancel", show=False),
     ]
+
+    SORT_MODE_NONE = ""
+    SORT_MODE_AWAITING_SORT = "awaiting_sort"
+    SORT_MODE_AWAITING_METHOD = "awaiting_method"
+
+    _sort_mode: reactive[str] = reactive(SORT_MODE_NONE)
 
     state: reactive[str] = reactive(SectionState.LOADING)
     error_message: reactive[str] = reactive("")
     loading_status: reactive[str] = reactive("")
     sort_state: reactive[SortState | None] = reactive(None)
+
+    def watch__sort_mode(self) -> None:
+        """React to sort mode changes with notification hints."""
+        if self._sort_mode == self.SORT_MODE_AWAITING_SORT:
+            self.notify("(s)ort", title="Format", timeout=3)
+        elif self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self.notify(
+                "(p)riority  (s)tatus  (d)ate  (0)reset",
+                title="Sort",
+                timeout=5,
+            )
 
     DEFAULT_CSS = """
     BaseSection {
@@ -132,16 +151,13 @@ class BaseSection(Static):
     def compose(self) -> ComposeResult:
         """Compose the section layout."""
         with Vertical():
-            # Header with title only
             with Horizontal(id="header"):
                 yield Label(self.section_title, id="title")
 
-            # Content area for data table, loading indicator, or messages
             with Vertical(id="content"):
                 with Vertical(id="content-wrapper"):
                     yield DataTable[str](id="data-table")
                     yield Label("", id="message")
-                # Spinner row at bottom
                 with Horizontal(id="spinner-row"):
                     yield StatusSpinner("", id="spinner")
 
@@ -281,21 +297,45 @@ class BaseSection(Static):
         """Action handler to move selection up."""
         self.select_previous()
 
+    def action_enter_sort_mode(self) -> None:
+        """Enter sort mode - first step of f -> s -> p/s/d/0 sequence."""
+        self._sort_mode = self.SORT_MODE_AWAITING_SORT
+
+    def action_sort_action(self) -> None:
+        """Handle 's' key - either enter method mode or sort by status."""
+        if self._sort_mode == self.SORT_MODE_AWAITING_SORT:
+            self._sort_mode = self.SORT_MODE_AWAITING_METHOD
+        elif self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self._apply_sort(SortMethod.STATUS)
+            self._sort_mode = self.SORT_MODE_NONE
+
+    def action_exit_sort_mode(self) -> None:
+        """Exit sort mode."""
+        self._sort_mode = self.SORT_MODE_NONE
+
     def action_sort_priority(self) -> None:
         """Sort by priority column."""
-        self._apply_sort(SortMethod.PRIORITY)
+        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self._apply_sort(SortMethod.PRIORITY)
+            self._sort_mode = self.SORT_MODE_NONE
 
     def action_sort_status(self) -> None:
         """Sort by status column."""
-        self._apply_sort(SortMethod.STATUS)
+        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self._apply_sort(SortMethod.STATUS)
+            self._sort_mode = self.SORT_MODE_NONE
 
     def action_sort_date(self) -> None:
         """Sort by date column."""
-        self._apply_sort(SortMethod.DATE)
+        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self._apply_sort(SortMethod.DATE)
+            self._sort_mode = self.SORT_MODE_NONE
 
     def action_sort_reset(self) -> None:
         """Reset sort to default order."""
-        self._reset_sort()
+        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
+            self._reset_sort()
+            self._sort_mode = self.SORT_MODE_NONE
 
     def _apply_sort(self, method: SortMethod) -> None:
         """Apply or toggle sort by given method.
@@ -365,6 +405,22 @@ class CodeReviewSubSection(BaseSection):
     """
 
     code_reviews: reactive[list[CodeReview]] = reactive([])
+
+    DEFAULT_CSS = """
+    CodeReviewSubSection {
+        border: round $surface-lighten-2;
+        border-title-align: left;
+        padding: 0 1;
+    }
+
+    CodeReviewSubSection.active {
+        border: round $success;
+    }
+
+    CodeReviewSubSection.offline {
+        border: round $warning;
+    }
+    """
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         """Initialize the code review subsection."""

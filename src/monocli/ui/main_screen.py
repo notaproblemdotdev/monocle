@@ -51,7 +51,7 @@ class MainScreen(Screen):
     BINDINGS = [
         Binding("tab", "switch_section", "Switch Section"),
         Binding("r", "refresh", "Refresh"),
-        Binding("q", "quit", "Quit"),
+        Binding("q", "quit", "Quit", priority=True),
     ]
 
     active_section: reactive[str] = reactive("mr", bindings=True)
@@ -74,7 +74,7 @@ class MainScreen(Screen):
     }
 
     #work-container {
-        height: 50%;
+        height: 1fr;
         border: solid $surface-lighten-2;
         padding: 0 1;
     }
@@ -510,7 +510,6 @@ class MainScreen(Screen):
 
     def action_quit(self) -> None:
         """Quit the application."""
-        self.run_worker(self._save_ui_state(), exclusive=True)
         self.app.exit()
 
     def on_key(self, event) -> None:
