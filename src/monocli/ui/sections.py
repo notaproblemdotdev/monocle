@@ -117,6 +117,13 @@ class BaseSection(Static):
         width: 100%;
     }
 
+    BaseSection #data-table .datatable--header-cell:first-child,
+    BaseSection #data-table .datatable--cell:first-child {
+        width: auto;
+        min-width: 2;
+        padding: 0;
+    }
+
     BaseSection #message {
         height: 100%;
         width: 100%;
@@ -387,11 +394,12 @@ class CodeReviewSubSection(BaseSection):
     CodeReviewSubSection {
         border: round white;
         border-title-align: left;
+        border-subtitle-align: right;
         padding: 0 1;
     }
 
     CodeReviewSubSection.active {
-        border: round $success;
+        border: double $success;
     }
 
     CodeReviewSubSection.offline {
@@ -422,6 +430,27 @@ class CodeReviewSubSection(BaseSection):
             self.border_title = f"{self.section_title} ({self._item_count})"
         else:
             self.border_title = self.section_title
+        self._update_adapter_subtitle()
+
+    def _update_adapter_subtitle(self) -> None:
+        """Update border subtitle with adapter icons."""
+        adapters = self._get_adapter_info()
+        if adapters:
+            self.border_subtitle = " · ".join(f"{icon} {name}" for icon, name in adapters)
+        else:
+            self.border_subtitle = ""
+
+    def _get_adapter_info(self) -> list[tuple[str, str]]:
+        """Get unique adapter (icon, name) pairs from current data."""
+        if not self.code_reviews:
+            return []
+        seen: set[str] = set()
+        adapters: list[tuple[str, str]] = []
+        for cr in self.code_reviews:
+            if cr.adapter_type not in seen:
+                seen.add(cr.adapter_type)
+                adapters.append((cr.adapter_icon, cr.adapter_type.title()))
+        return adapters
 
     def _setup_table(self) -> None:
         """Setup DataTable columns with reserved space for sort indicators."""
@@ -433,6 +462,7 @@ class CodeReviewSubSection(BaseSection):
         table.zebra_stripes = True
         table.show_header = True
         cols = table.add_columns(
+            "",
             "Key",
             "Title",
             f"Status{SORT_INDICATOR_NONE}",
@@ -441,8 +471,8 @@ class CodeReviewSubSection(BaseSection):
             f"Created{SORT_INDICATOR_NONE}",
         )
         self._col_keys = {
-            "status": cols[2],
-            "date": cols[5],
+            "status": cols[3],
+            "date": cols[6],
         }
 
     def watch_code_reviews(self) -> None:
@@ -473,6 +503,7 @@ class CodeReviewSubSection(BaseSection):
             created = self._format_date(cr.created_at)
 
             self._data_table.add_row(
+                cr.adapter_icon,
                 cr.display_key(),
                 self._truncate_title(cr.title),
                 cr.display_status(),
@@ -483,6 +514,8 @@ class CodeReviewSubSection(BaseSection):
             )
 
         self.state = SectionState.DATA
+
+        self._update_border_title()
 
     def _perform_sort(self) -> None:
         """Sort code reviews by current sort state."""
@@ -507,6 +540,7 @@ class CodeReviewSubSection(BaseSection):
         for cr in sorted_reviews:
             created = self._format_date(cr.created_at)
             self._data_table.add_row(
+                cr.adapter_icon,
                 cr.display_key(),
                 self._truncate_title(cr.title),
                 cr.display_status(),
@@ -788,6 +822,37 @@ class PieceOfWorkSection(BaseSection):
         super().on_mount()
         if self._data_table:
             self._setup_table()
+        self._update_border_title()
+
+    def get_adapter_info(self) -> list[tuple[str, str]]:
+        """Get unique adapter (icon, name) pairs from current data."""
+        if not self.work_items:
+            return []
+        seen: set[str] = set()
+        adapters: list[tuple[str, str]] = []
+        for item in self.work_items:
+            adapter_type = getattr(item, "adapter_type", None)
+            icon = getattr(item, "adapter_icon", None)
+            if adapter_type and icon and adapter_type not in seen:
+                seen.add(adapter_type)
+                adapters.append((icon, adapter_type.title()))
+        return adapters
+
+    def _update_border_title(self) -> None:
+        """Update the border title with count."""
+        if self.state == SectionState.DATA:
+            self.border_title = f"{self.section_title} ({self._item_count})"
+        else:
+            self.border_title = self.section_title
+        self._update_adapter_subtitle()
+
+    def _update_adapter_subtitle(self) -> None:
+        """Update border subtitle with adapter icons."""
+        adapters = self.get_adapter_info()
+        if adapters:
+            self.border_subtitle = " · ".join(f"{icon} {name}" for icon, name in adapters)
+        else:
+            self.border_subtitle = ""
 
     def _setup_table(self) -> None:
         """Setup DataTable columns with reserved space for sort indicators."""
@@ -799,7 +864,7 @@ class PieceOfWorkSection(BaseSection):
         table.zebra_stripes = True
         table.show_header = True
         cols = table.add_columns(
-            "Icon",
+            "",
             "Key",
             "Title",
             f"Status{SORT_INDICATOR_NONE}",
@@ -869,6 +934,8 @@ class PieceOfWorkSection(BaseSection):
             self.state = SectionState.DATA
         else:
             self.state = SectionState.EMPTY
+
+        self._update_border_title()
 
     def _perform_sort(self) -> None:
         """Sort work items by current sort state."""

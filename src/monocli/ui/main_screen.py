@@ -75,11 +75,12 @@ class MainScreen(Screen):
         height: 1fr;
         border: round white;
         border-title-align: left;
+        border-subtitle-align: right;
         padding: 0 1;
     }
 
     #work-container.active {
-        border: round $success;
+        border: double $success;
     }
 
     #work-container.offline {
@@ -278,8 +279,18 @@ class MainScreen(Screen):
             logger.debug(f"Loaded {len(result.data)} work items")
             self._track_failed_sources(result)
             self.work_offline = not await self._store.is_fresh("work_items")
+            self._update_work_subtitle()
         except Exception as e:
             logger.warning("Failed to load cached work items", error=str(e))
+
+    def _update_work_subtitle(self) -> None:
+        """Update work container subtitle with adapter icons."""
+        work_container = self.query_one("#work-container", Vertical)
+        adapters = self.piece_of_work_section.get_adapter_info()
+        if adapters:
+            work_container.border_subtitle = ", ".join(f"{icon} {name}" for icon, name in adapters)
+        else:
+            work_container.border_subtitle = ""
 
     def _track_failed_sources(self, result) -> None:
         """Track failed sources for UI warnings."""
@@ -399,6 +410,7 @@ class MainScreen(Screen):
 
             # Mark as online (not offline) if we got fresh data
             self.work_offline = not result.fresh
+            self._update_work_subtitle()
 
             fetch_logger.info(
                 "Fetched work items",

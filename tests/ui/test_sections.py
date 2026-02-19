@@ -9,9 +9,11 @@ import pytest
 from textual.app import App
 from textual.app import ComposeResult
 
+from monocli.models import CodeReview
 from monocli.models import JiraWorkItem
 from monocli.models import MergeRequest
-from monocli.ui.sections import MergeRequestContainer
+from monocli.ui.sections import CodeReviewSection
+from monocli.ui.sections import CodeReviewSubSection
 from monocli.ui.sections import MergeRequestSection
 from monocli.ui.sections import SectionState
 from monocli.ui.sections import WorkItemSection
@@ -20,9 +22,7 @@ from monocli.ui.sections import WorkItemSection
 class TestApp(App[None]):
     """Test app for wrapping section widgets."""
 
-    def __init__(
-        self, section: MergeRequestSection | WorkItemSection | MergeRequestContainer
-    ) -> None:
+    def __init__(self, section: CodeReviewSubSection | WorkItemSection | CodeReviewSection) -> None:
         """Initialize test app with a section widget."""
         super().__init__()
         self.section = section
@@ -200,7 +200,7 @@ class TestMergeRequestSection:
                 data_table.ordered_columns[i].label.plain
                 for i in range(len(data_table.ordered_columns))
             ]
-            assert columns == ["Key", "Title", "Status  ", "Author", "Branch", "Created  "]
+            assert columns == ["", "Key", "Title", "Status  ", "Author", "Branch", "Created  "]
 
     def test_display_key_format(self, sample_mr: MergeRequest) -> None:
         """Test that MR keys are displayed with ! prefix."""
@@ -325,7 +325,7 @@ class TestWorkItemSection:
                 for i in range(len(data_table.ordered_columns))
             ]
             assert columns == [
-                "Icon",
+                "",
                 "Key",
                 "Title",
                 "Status  ",
