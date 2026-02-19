@@ -330,7 +330,9 @@ class TestWorkItemSection:
                 "Status  ",
                 "Priority  ",
                 "Context",
-                "Date  ",
+                "Due Date  ",
+                "Created  ",
+                "Updated  ",
             ]
 
     @pytest.mark.asyncio

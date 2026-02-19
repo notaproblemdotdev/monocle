@@ -22,6 +22,9 @@ class SortMethod(str, Enum):
     PRIORITY = "priority"
     STATUS = "status"
     DATE = "date"
+    DUE_DATE = "due_date"
+    CREATED = "created"
+    UPDATED = "updated"
     NONE = "none"
 
 
@@ -92,11 +95,21 @@ def get_work_item_sort_key(item: PieceOfWork, method: SortMethod) -> Any:
         }
         status_upper = item.display_status().upper()
         return status_order.get(status_upper, 5)
-    if method == SortMethod.DATE:
+    if method in (SortMethod.DATE, SortMethod.DUE_DATE):
         due = item.due_date
         if due is None:
             return ""
         return due
+    if method == SortMethod.CREATED:
+        created = item.created
+        if created is None:
+            return ""
+        return created
+    if method == SortMethod.UPDATED:
+        updated = item.updated
+        if updated is None:
+            return ""
+        return updated
     return 0
 
 

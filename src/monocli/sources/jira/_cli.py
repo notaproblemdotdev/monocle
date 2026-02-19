@@ -79,6 +79,8 @@ class JiraAdapter(CLIAdapter):
             "search",
             "--jql",
             "assignee = currentUser() AND statusCategory != Done",
+            "--fields",
+            "issuetype,key,assignee,priority,status,summary,created,updated,duedate",
             "--json",
         ]
         try:
@@ -106,7 +108,7 @@ class JiraAdapter(CLIAdapter):
             if await adapter.check_auth():
                 issues = await adapter.fetch_assigned_items()
             else:
-                print("Please run: acli login")
+                print("Please run: acli jira auth login")
         """
         logger.debug("Checking Jira authentication")
         try:

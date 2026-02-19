@@ -84,6 +84,12 @@ class PieceOfWork(t.Protocol):
     @property
     def due_date(self) -> str | None: ...
 
+    @property
+    def created(self) -> str | None: ...
+
+    @property
+    def updated(self) -> str | None: ...
+
     # Display methods
     def display_key(self) -> str: ...
     def display_status(self) -> str: ...
@@ -344,6 +350,18 @@ class GitHubPieceOfWork(BaseModel):
         return None
 
     @property
+    def created(self) -> str | None:
+        """Get creation date."""
+        if self.created_at:
+            return self.created_at.isoformat()
+        return None
+
+    @property
+    def updated(self) -> str | None:
+        """GitHub issues don't expose updated in basic fields."""
+        return None
+
+    @property
     def url(self) -> str:
         """Get URL as string."""
         return str(self.html_url)
@@ -444,8 +462,21 @@ class JiraPieceOfWork(BaseModel):
 
     @property
     def due_date(self) -> str | None:
-        """Get due date if available (Jira doesn't expose this directly in basic fields)."""
-        return None
+        """Get due date if available."""
+        duedate = self.fields.get("duedate")
+        return str(duedate) if duedate else None
+
+    @property
+    def created(self) -> str | None:
+        """Get creation date."""
+        created = self.fields.get("created")
+        return str(created) if created else None
+
+    @property
+    def updated(self) -> str | None:
+        """Get last update date."""
+        updated = self.fields.get("updated")
+        return str(updated) if updated else None
 
     @property
     def url(self) -> str:
@@ -541,6 +572,16 @@ class TodoistPieceOfWork(BaseModel):
         if not self.due:
             return None
         return self.due.get("date") or self.due.get("datetime")
+
+    @property
+    def created(self) -> str | None:
+        """Get creation date."""
+        return self.created_at
+
+    @property
+    def updated(self) -> str | None:
+        """Todoist tasks use completed_at for updates."""
+        return self.completed_at
 
     @property
     def url(self) -> str:

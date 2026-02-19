@@ -844,12 +844,16 @@ class PieceOfWorkSection(BaseSection):
             f"Status{SORT_INDICATOR_NONE}",
             f"Priority{SORT_INDICATOR_NONE}",
             "Context",
-            f"Date{SORT_INDICATOR_NONE}",
+            f"Due Date{SORT_INDICATOR_NONE}",
+            f"Created{SORT_INDICATOR_NONE}",
+            f"Updated{SORT_INDICATOR_NONE}",
         )
         self._col_keys = {
             "status": cols[3],
             "priority": cols[4],
-            "date": cols[6],
+            "due_date": cols[6],
+            "created": cols[7],
+            "updated": cols[8],
         }
 
     def watch_work_items(self) -> None:
@@ -885,7 +889,9 @@ class PieceOfWorkSection(BaseSection):
                 status = item.display_status()
                 priority = str(item.priority) if item.priority else ""
                 context = item.assignee or ""
-                date_str = item.due_date or ""
+                due_date_str = item.due_date or ""
+                created_str = item.created or ""
+                updated_str = item.updated or ""
                 url = item.url
 
                 self._data_table.add_row(
@@ -895,7 +901,9 @@ class PieceOfWorkSection(BaseSection):
                     status,
                     priority,
                     context,
-                    date_str,
+                    due_date_str,
+                    created_str,
+                    updated_str,
                     key=url,  # Store URL for browser opening
                 )
                 added_count += 1
@@ -939,7 +947,9 @@ class PieceOfWorkSection(BaseSection):
                 status = item.display_status()
                 priority = str(item.priority) if item.priority else ""
                 context = item.assignee or ""
-                date_str = item.due_date or ""
+                due_date_str = item.due_date or ""
+                created_str = item.created or ""
+                updated_str = item.updated or ""
                 url = item.url
 
                 self._data_table.add_row(
@@ -949,7 +959,9 @@ class PieceOfWorkSection(BaseSection):
                     status,
                     priority,
                     context,
-                    date_str,
+                    due_date_str,
+                    created_str,
+                    updated_str,
                     key=url,
                 )
             except Exception:
@@ -962,7 +974,9 @@ class PieceOfWorkSection(BaseSection):
 
         status_indicator = SORT_INDICATOR_NONE
         priority_indicator = SORT_INDICATOR_NONE
-        date_indicator = SORT_INDICATOR_NONE
+        due_date_indicator = SORT_INDICATOR_NONE
+        created_indicator = SORT_INDICATOR_NONE
+        updated_indicator = SORT_INDICATOR_NONE
 
         if self.sort_state:
             indicator = get_sort_indicator(self.sort_state)
@@ -970,8 +984,12 @@ class PieceOfWorkSection(BaseSection):
                 status_indicator = indicator
             elif self.sort_state.method == SortMethod.PRIORITY:
                 priority_indicator = indicator
-            elif self.sort_state.method == SortMethod.DATE:
-                date_indicator = indicator
+            elif self.sort_state.method == SortMethod.DUE_DATE:
+                due_date_indicator = indicator
+            elif self.sort_state.method == SortMethod.CREATED:
+                created_indicator = indicator
+            elif self.sort_state.method == SortMethod.UPDATED:
+                updated_indicator = indicator
 
         if "status" in self._col_keys:
             self._data_table.columns[self._col_keys["status"]].label = Text(
@@ -981,8 +999,18 @@ class PieceOfWorkSection(BaseSection):
             self._data_table.columns[self._col_keys["priority"]].label = Text(
                 f"Priority{priority_indicator}"
             )
-        if "date" in self._col_keys:
-            self._data_table.columns[self._col_keys["date"]].label = Text(f"Date{date_indicator}")
+        if "due_date" in self._col_keys:
+            self._data_table.columns[self._col_keys["due_date"]].label = Text(
+                f"Due Date{due_date_indicator}"
+            )
+        if "created" in self._col_keys:
+            self._data_table.columns[self._col_keys["created"]].label = Text(
+                f"Created{created_indicator}"
+            )
+        if "updated" in self._col_keys:
+            self._data_table.columns[self._col_keys["updated"]].label = Text(
+                f"Updated{updated_indicator}"
+            )
 
     def get_selected_url(self) -> str | None:
         """Get the URL of the currently selected row.

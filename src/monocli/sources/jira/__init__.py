@@ -106,7 +106,7 @@ class JiraSource(PieceOfWorkSource, SetupCapableSource):
                 description="Sign in to acli CLI interactively",
                 requires_params=False,
                 external_process=True,
-                external_command="acli login",
+                external_command="acli jira auth login",
             ),
         ]
 
@@ -201,7 +201,7 @@ class JiraCLISetupSource(SetupCapableSource):
                 description="Sign in to acli CLI interactively",
                 requires_params=False,
                 external_process=True,
-                external_command="acli login",
+                external_command="acli jira auth login",
             ),
         ]
 
