@@ -60,38 +60,19 @@ class BaseSection(Static):
     """
 
     BINDINGS = [
-        Binding("o", "open_selected", "Open in Browser", show=False),
-        Binding("j", "move_down", "Down", show=False),
-        Binding("k", "move_up", "Up", show=False),
-        Binding("f", "enter_sort_mode", "Format"),
-        Binding("s", "sort_action", "Sort", show=False),
-        Binding("p", "sort_priority", "Priority", show=False),
-        Binding("d", "sort_date", "Date", show=False),
-        Binding("0", "sort_reset", "Reset", show=False),
-        Binding("escape", "exit_sort_mode", "Cancel", show=False),
+        Binding("o", "open_selected", "Open in Browser"),
+        Binding("j", "move_down", "Down"),
+        Binding("k", "move_up", "Up"),
+        Binding("p", "sort_priority", "Sort Priority"),
+        Binding("s", "sort_status", "Sort Status"),
+        Binding("d", "sort_date", "Sort Date"),
+        Binding("0", "sort_reset", "Reset Sort"),
     ]
-
-    SORT_MODE_NONE = ""
-    SORT_MODE_AWAITING_SORT = "awaiting_sort"
-    SORT_MODE_AWAITING_METHOD = "awaiting_method"
-
-    _sort_mode: reactive[str] = reactive(SORT_MODE_NONE)
 
     state: reactive[str] = reactive(SectionState.LOADING)
     error_message: reactive[str] = reactive("")
     loading_status: reactive[str] = reactive("")
     sort_state: reactive[SortState | None] = reactive(None)
-
-    def watch__sort_mode(self) -> None:
-        """React to sort mode changes with notification hints."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_SORT:
-            self.notify("(s)ort", title="Format", timeout=3)
-        elif self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self.notify(
-                "(p)riority  (s)tatus  (d)ate  (0)reset",
-                title="Sort",
-                timeout=5,
-            )
 
     DEFAULT_CSS = """
     BaseSection {
@@ -291,45 +272,21 @@ class BaseSection(Static):
         """Action handler to move selection up."""
         self.select_previous()
 
-    def action_enter_sort_mode(self) -> None:
-        """Enter sort mode - first step of f -> s -> p/s/d/0 sequence."""
-        self._sort_mode = self.SORT_MODE_AWAITING_SORT
-
-    def action_sort_action(self) -> None:
-        """Handle 's' key - either enter method mode or sort by status."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_SORT:
-            self._sort_mode = self.SORT_MODE_AWAITING_METHOD
-        elif self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self._apply_sort(SortMethod.STATUS)
-            self._sort_mode = self.SORT_MODE_NONE
-
-    def action_exit_sort_mode(self) -> None:
-        """Exit sort mode."""
-        self._sort_mode = self.SORT_MODE_NONE
-
     def action_sort_priority(self) -> None:
         """Sort by priority column."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self._apply_sort(SortMethod.PRIORITY)
-            self._sort_mode = self.SORT_MODE_NONE
+        self._apply_sort(SortMethod.PRIORITY)
 
     def action_sort_status(self) -> None:
         """Sort by status column."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self._apply_sort(SortMethod.STATUS)
-            self._sort_mode = self.SORT_MODE_NONE
+        self._apply_sort(SortMethod.STATUS)
 
     def action_sort_date(self) -> None:
         """Sort by date column."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self._apply_sort(SortMethod.DATE)
-            self._sort_mode = self.SORT_MODE_NONE
+        self._apply_sort(SortMethod.DATE)
 
     def action_sort_reset(self) -> None:
         """Reset sort to default order."""
-        if self._sort_mode == self.SORT_MODE_AWAITING_METHOD:
-            self._reset_sort()
-            self._sort_mode = self.SORT_MODE_NONE
+        self._reset_sort()
 
     def _apply_sort(self, method: SortMethod) -> None:
         """Apply or toggle sort by given method.
@@ -477,7 +434,6 @@ class CodeReviewSubSection(BaseSection):
         table.zebra_stripes = True
         table.show_header = True
         cols = table.add_columns(
-            "",
             "Key",
             "Title",
             f"Status{SORT_INDICATOR_NONE}",
@@ -486,8 +442,8 @@ class CodeReviewSubSection(BaseSection):
             f"Created{SORT_INDICATOR_NONE}",
         )
         self._col_keys = {
-            "status": cols[3],
-            "date": cols[6],
+            "status": cols[2],
+            "date": cols[5],
         }
 
     def watch_code_reviews(self) -> None:
@@ -518,7 +474,6 @@ class CodeReviewSubSection(BaseSection):
             created = self._format_date(cr.created_at)
 
             self._data_table.add_row(
-                cr.adapter_icon,
                 cr.display_key(),
                 self._truncate_title(cr.title),
                 cr.display_status(),
@@ -555,7 +510,6 @@ class CodeReviewSubSection(BaseSection):
         for cr in sorted_reviews:
             created = self._format_date(cr.created_at)
             self._data_table.add_row(
-                cr.adapter_icon,
                 cr.display_key(),
                 self._truncate_title(cr.title),
                 cr.display_status(),
@@ -673,11 +627,10 @@ class CodeReviewSection(Static):
     def __init__(self, *args: object, **kwargs: object) -> None:
         """Initialize the code review container with two subsections."""
         super().__init__(*args, **kwargs)
-        self.opened_by_me_section = CodeReviewSubSection(id="cr-opened-by-me")
-        self.opened_by_me_section.section_title = "[2] Code reviews from me"
+        self.opened_by_me_section.section_title = "Opened by me"
         self.opened_by_me_section.subsection_type = "opened"
         self.assigned_to_me_section = CodeReviewSubSection(id="cr-assigned-to-me")
-        self.assigned_to_me_section.section_title = "[1] Code reviews for me"
+        self.assigned_to_me_section.section_title = "Assigned / Pending review"
         self.assigned_to_me_section.subsection_type = "assigned"
 
     def compose(self) -> ComposeResult:
