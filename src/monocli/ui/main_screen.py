@@ -30,6 +30,7 @@ from monocli.db.connection import get_db_manager
 from monocli.db.preferences import PreferencesManager
 from monocli.ui.sections import CodeReviewSection
 from monocli.ui.sections import PieceOfWorkSection
+from monocli.ui.sections import SectionClicked
 from monocli.ui.topbar import TopBar
 
 
@@ -73,7 +74,7 @@ class MainScreen(Screen):
 
     #work-container {
         height: 1fr;
-        border: round $text-muted;
+        border: round $panel;
         border-title-align: left;
         border-subtitle-align: right;
         padding: 0 1;
@@ -508,6 +509,12 @@ class MainScreen(Screen):
     def action_switch_section(self) -> None:
         """Action handler for switching sections."""
         self.switch_section()
+
+    def on_section_clicked(self, event: SectionClicked) -> None:
+        """Handle section click to update active section state."""
+        self.active_section = event.section_type
+        if event.section_type == "mr" and event.subsection:
+            self.active_mr_subsection = event.subsection
 
     def action_refresh(self) -> None:
         """Action handler to manually refresh data.

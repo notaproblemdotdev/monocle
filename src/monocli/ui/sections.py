@@ -17,6 +17,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.containers import Vertical
+from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import DataTable
 from textual.widgets import Label
@@ -40,6 +41,15 @@ class SectionState:
     EMPTY = "empty"
     ERROR = "error"
     DATA = "data"
+
+
+class SectionClicked(Message):
+    """Message posted when a section is clicked."""
+
+    def __init__(self, section_type: str, subsection: str = "") -> None:
+        super().__init__()
+        self.section_type = section_type
+        self.subsection = subsection
 
 
 class BaseSection(Static):
@@ -392,7 +402,7 @@ class CodeReviewSubSection(BaseSection):
 
     DEFAULT_CSS = """
     CodeReviewSubSection {
-        border: round $text-muted;
+        border: round $panel;
         border-title-align: left;
         border-subtitle-align: right;
         padding: 0 1;
@@ -412,6 +422,11 @@ class CodeReviewSubSection(BaseSection):
         super().__init__("Code Reviews", *args, **kwargs)
         self._item_count = 0
         self._col_keys: dict[str, Any] = {}
+        self.subsection_type = ""
+
+    def on_click(self) -> None:
+        """Handle click to notify parent when section is clicked."""
+        self.post_message(SectionClicked("mr", self.subsection_type))
 
     def _get_empty_message(self) -> str:
         """Return empty state message for code reviews."""
@@ -660,8 +675,10 @@ class CodeReviewSection(Static):
         super().__init__(*args, **kwargs)
         self.opened_by_me_section = CodeReviewSubSection(id="cr-opened-by-me")
         self.opened_by_me_section.section_title = "[2] Code reviews from me"
+        self.opened_by_me_section.subsection_type = "opened"
         self.assigned_to_me_section = CodeReviewSubSection(id="cr-assigned-to-me")
         self.assigned_to_me_section.section_title = "[1] Code reviews for me"
+        self.assigned_to_me_section.subsection_type = "assigned"
 
     def compose(self) -> ComposeResult:
         """Compose the container with two code review subsections."""
@@ -812,6 +829,10 @@ class PieceOfWorkSection(BaseSection):
         super().__init__("Work Items", *args, **kwargs)
         self._item_count = 0
         self._col_keys: dict[str, Any] = {}
+
+    def on_click(self) -> None:
+        """Handle click to notify parent when section is clicked."""
+        self.post_message(SectionClicked("work"))
 
     def _get_empty_message(self) -> str:
         """Return empty state message for work items."""
